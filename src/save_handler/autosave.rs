@@ -6,24 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{Builder, TempDir};
 use gtk::prelude::*;
 
-use std::sync::mpsc::{channel, Receiver};
-
-use crate::save_handler::db::*;
-use crate::save_handler::autosave;
-
-use crate::models::page::*;
-
-use std::path::Path;
-
-pub struct OpenResult {
-    pub page_count: usize, 
-    pub first_id: i64, 
-    pub first_page: PageData, 
-    pub conn: rusqlite::Connection, 
-    pub bundle_path: Option<PathBuf>, 
-    pub tmp: PathBuf,
-}
-
 pub static SESSION_TEMP_DIR: LazyLock<TempDir> = LazyLock::new(|| {
     let dir = Builder::new()
         .prefix("rastin-")
@@ -101,37 +83,6 @@ pub fn clear_old_sessions() {
             }
         }
     }
-}
-
-pub fn open_document_in_background(
-    chosen: PathBuf, 
-    tmp: PathBuf
-) -> Receiver<Result<OpenResult, String>> {
-    
-    let ext = chosen
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_string();
-
-    let (tx, rx) = channel::<Result<OpenResult, String>>();
-    let chosen_clone = chosen.clone();
-
-    std::thread::spawn(move || {
-        let result = (|| -> Result<OpenResult, String> {
-            
-            import_bundle(&chosen_clone, &tmp).map_err(|e| e.to_string())?;
-            let conn = rusqlite::Connection::open(&tmp).map_err(|e| e.to_string())?;
-            let count    = page_count(&conn).unwrap_or(1);
-            let first_id = page_id_at(&conn, 0).unwrap_or(1);
-            let first_page = load_page(&conn, first_id).unwrap_or_default();
-            Ok(OpenResult { page_count: count, first_id, first_page, conn, bundle_path: Some(chosen_clone), tmp })
-        
-        })();
-        let _ = tx.send(result);
-    });
-
-    rx
 }
 
 pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {

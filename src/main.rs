@@ -11,9 +11,6 @@ use crate::models::stroke;
 
 use crate::gui::build_ui;
 
-use std::path::PathBuf;
-use std::env;
-
 use gtk::prelude::*;
 use gtk::{Application};
 
