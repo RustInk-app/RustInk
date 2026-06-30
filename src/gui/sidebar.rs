@@ -168,6 +168,59 @@ pub fn refresh_sidebar(
                     refresh_sidebar(&s2, &lb2, &c2, &sp2, &lt2);
                 });
 
+                let item_move_up = gtk::MenuItem::with_label("Sposta su");
+                let s4 = s_menu.clone(); let lb4 = lb_menu.clone(); let c4 = c_menu.clone();
+                let sp4 = sp_menu.clone(); let lt4 = lt_menu.clone();
+                item_move_up.set_sensitive(i > 0);
+                item_move_up.connect_activate(move |_| {
+                    let mut st = s4.borrow_mut();
+                    if i == 0 { return; }
+                    if let Some(conn) = &st.db {
+                        if let Ok(page_id) = page_id_at(conn, i) {
+                            let _ = move_page(conn, page_id, i - 1);
+                        }
+                    }
+                    let was_current = st.current_page == i;
+                    if was_current {
+                        st.current_page = usize::MAX;
+                        let _ = st.switch_to_page(i - 1);
+                    } else if st.current_page == i - 1 {
+                        st.current_page = usize::MAX;
+                        let _ = st.switch_to_page(i);
+                    }
+                    let pc = st.page_count; let cur = st.current_page; drop(st);
+                    sp4.set_range(1.0, pc as f64); sp4.set_value((cur + 1) as f64); lt4.set_text(&format!("di {}", pc));
+                    refresh_sidebar(&s4, &lb4, &c4, &sp4, &lt4);
+                    c4.queue_draw();
+                });
+
+                let item_move_down = gtk::MenuItem::with_label("Sposta giù");
+                let s5 = s_menu.clone(); let lb5 = lb_menu.clone(); let c5 = c_menu.clone();
+                let sp5 = sp_menu.clone(); let lt5 = lt_menu.clone();
+                let page_count_now = s_menu.borrow().page_count;
+                item_move_down.set_sensitive(i + 1 < page_count_now);
+                item_move_down.connect_activate(move |_| {
+                    let mut st = s5.borrow_mut();
+                    if i + 1 >= st.page_count { return; }
+                    if let Some(conn) = &st.db {
+                        if let Ok(page_id) = page_id_at(conn, i) {
+                            let _ = move_page(conn, page_id, i + 1);
+                        }
+                    }
+                    let was_current = st.current_page == i;
+                    if was_current {
+                        st.current_page = usize::MAX;
+                        let _ = st.switch_to_page(i + 1);
+                    } else if st.current_page == i + 1 {
+                        st.current_page = usize::MAX;
+                        let _ = st.switch_to_page(i);
+                    }
+                    let pc = st.page_count; let cur = st.current_page; drop(st);
+                    sp5.set_range(1.0, pc as f64); sp5.set_value((cur + 1) as f64); lt5.set_text(&format!("di {}", pc));
+                    refresh_sidebar(&s5, &lb5, &c5, &sp5, &lt5);
+                    c5.queue_draw();
+                });
+
                 let item_delete = gtk::MenuItem::with_label("Elimina pagina");
                 let s3 = s_menu.clone(); let lb3 = lb_menu.clone(); let c3 = c_menu.clone();
                 let sp3 = sp_menu.clone(); let lt3 = lt_menu.clone();
@@ -193,8 +246,12 @@ pub fn refresh_sidebar(
                     }
                 });
 
+                
                 menu.append(&item_up);
                 menu.append(&item_down);
+                menu.append(&gtk::SeparatorMenuItem::new());
+                menu.append(&item_move_up);
+                menu.append(&item_move_down);
                 menu.append(&gtk::SeparatorMenuItem::new());
                 menu.append(&item_delete);
                 menu.show_all();

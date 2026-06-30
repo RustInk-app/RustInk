@@ -176,7 +176,7 @@ pub fn hit_test_component(page: &PageData, px: f64, py: f64) -> Option<usize> {
                 }
             }
             
-            ComponentPayload::RichText(_) | ComponentPayload::Image(_) => {
+            ComponentPayload::RichText(_) | ComponentPayload::Image(_) | ComponentPayload::Shape(_) => {
                 if let Some((bx, by, bw, bh)) = component_bbox(payload) {
                     if px >= bx && px <= bx + bw && py >= by && py <= by + bh {
                         return Some(i);

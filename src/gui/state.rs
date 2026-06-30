@@ -61,6 +61,7 @@ pub struct AppState {
     pub paper_background: PaperBackground,
     pub pref_button_2_tool: Option<Tool>,
     pub pref_button_3_tool: Option<Tool>,
+    pub current_shape: Option<ShapeBlock>,
 }
 
 impl AppState {
@@ -95,6 +96,7 @@ impl AppState {
             paper_background: PaperBackground::Grid,
             pref_button_2_tool: None,
             pref_button_3_tool: None,
+            current_shape: None,
         }
     }
 

@@ -66,6 +66,7 @@ pub(crate) fn setup_toolbar(
     let btn_tool_eraser = make_toggle("tool-eraser.svg", "Gomma");
     let btn_tool_text = make_toggle("tool-text.svg", "Testo");
     let btn_tool_select = make_toggle("select-rect.svg", "Seleziona");
+    let btn_tool_shape = make_toggle("tool-shape.svg", "Forme");
     btn_tool_pen.set_active(true);
 
     {
@@ -127,11 +128,50 @@ pub(crate) fn setup_toolbar(
             }
         });
     }
+    let shape_menu = gtk::Menu::new();
+    let shape_items: [(ShapeKind, &str); 5] = [
+        (ShapeKind::Rectangle, "Disegna Rettangolo"),
+        (ShapeKind::Ellipse, "Disegna Ellisse"),
+        (ShapeKind::Arrow, "Disegna Freccia"),
+        (ShapeKind::DoubleArrow, "Disegna Doppia Freccia"),
+        (ShapeKind::Line, "Disegna Linea Retta"),
+    ];
+    for (kind, label) in shape_items {
+        let item = gtk::MenuItem::with_label(label);
+        let s = state.clone();
+        item.connect_activate(move |_| {
+            s.borrow_mut().active_tool = Tool::Shape(kind.clone());
+        });
+        shape_menu.append(&item);
+    }
+    shape_menu.show_all();
+
+    {
+        let s = state.clone();
+        let bp = btn_tool_pen.clone();
+        let be = btn_tool_eraser.clone();
+        let bt = btn_tool_text.clone();
+        let bsel = btn_tool_select.clone();
+        let menu = shape_menu.clone();
+        btn_tool_shape.connect_toggled(move |b| {
+            if b.is_active() {
+                bp.set_active(false);
+                be.set_active(false);
+                bt.set_active(false);
+                bsel.set_active(false);
+                if !matches!(s.borrow().active_tool, Tool::Shape(_)) {
+                    s.borrow_mut().active_tool = Tool::Shape(ShapeKind::Line);
+                }
+                menu.popup_at_widget(b, gtk::gdk::Gravity::SouthWest, gtk::gdk::Gravity::NorthWest, None);
+            }
+        });
+    }
 
     add_item!(&btn_tool_pen);
     add_item!(&btn_tool_eraser);
     add_item!(&btn_tool_text);
     add_item!(&btn_tool_select);
+    add_item!(&btn_tool_shape);
     add_sep!();
 
     let preset_colors = vec![

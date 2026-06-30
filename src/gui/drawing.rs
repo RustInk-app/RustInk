@@ -46,6 +46,14 @@ pub fn component_bbox(payload: &ComponentPayload) -> Option<(f64, f64, f64, f64)
             let h = if b.height > 0.0 { b.height } else { 100.0 };
             Some((b.x, b.y, w, h))
         }
+        ComponentPayload::Shape(b) => {
+            let hw = b.width / 2.0 + 4.0;
+            let mnx = b.x1.min(b.x2) - hw;
+            let mxx = b.x1.max(b.x2) + hw;
+            let mny = b.y1.min(b.y2) - hw;
+            let mxy = b.y1.max(b.y2) + hw;
+            Some((mnx, mny, mxx - mnx, mxy - mny))
+        }
     }
 }
 
@@ -114,9 +122,7 @@ pub fn draw_page(cr: &cairo::Context, page: &PageData, ox: f64, oy: f64, cache: 
             ComponentPayload::Image(block) => {
                 cr.set_operator(cairo::Operator::Over);
                 render_image_block(cr, &block, ox, oy, cache); 
-            }
-
-            
+            }         
             ComponentPayload::PenStroke(stroke) => {
                 if stroke.points.len() < 2 { continue; }
                 cr.set_operator(cairo::Operator::Over);
@@ -131,8 +137,6 @@ pub fn draw_page(cr: &cairo::Context, page: &PageData, ox: f64, oy: f64, cache: 
                 }
                 let _ = cr.stroke();
             }
- 
-            
             ComponentPayload::EraserStroke(stroke) => {
                 if stroke.points.len() < 2 { continue; }
                 cr.set_operator(cairo::Operator::Clear);
@@ -147,12 +151,14 @@ pub fn draw_page(cr: &cairo::Context, page: &PageData, ox: f64, oy: f64, cache: 
                 }
                 let _ = cr.stroke();
             }
- 
-            
             ComponentPayload::RichText(block) => {
                 
                 cr.set_operator(cairo::Operator::Over);
                 render_rich_text_block(cr, &block, ox, oy);
+            }
+            ComponentPayload::Shape(block) => {
+                cr.set_operator(cairo::Operator::Over);
+                render_shape(cr, block, ox, oy);
             }
 
         }
@@ -210,7 +216,10 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
             draw_live_stroke(cr, stroke, &st.active_tool, 0.0, 0.0);
         }
 
-        
+        if let Some(ref shape) = st.current_shape {
+            render_shape(cr, shape, 0.0, 0.0);
+        }
+
         for &sel_idx in &st.selected_indices {
             draw_selection_overlay(cr, &st.current_page_data, sel_idx, 0.0, 0.0);
         }

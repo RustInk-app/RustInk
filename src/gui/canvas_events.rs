@@ -170,6 +170,7 @@ pub(crate) fn setup_canvas_events(
                                     ComponentPayload::PenStroke(s) | ComponentPayload::EraserStroke(s) => s.points.first().copied().unwrap_or((0.0, 0.0)),
                                     ComponentPayload::RichText(b) => (b.x, b.y),
                                     ComponentPayload::Image(b)    => (b.x, b.y),
+                                    ComponentPayload::Shape(b) => (b.x1, b.y1),
                                 };
                                 orig_positions.push((s_idx, ox, oy));
                             }
@@ -181,6 +182,13 @@ pub(crate) fn setup_canvas_events(
                         st.drag_mode = DragMode::Marquee { start_px: px, start_py: py, current_px: px, current_py: py };
                     }
                 }
+            }
+            Tool::Shape(kind) => {
+                let color = s.borrow().current_color.clone();
+                let width = s.borrow().current_width;
+                let mut st = s.borrow_mut();
+                st.is_drawing = true;
+                st.current_shape = Some(ShapeBlock { kind: kind.clone(), x1: px, y1: py, x2: px, y2: py, color, width });
             }
         }
     
@@ -215,6 +223,12 @@ pub(crate) fn setup_canvas_events(
                         let new_y = orig_y + dy;
                         if let Some(comp) = st.current_page_data.components.get_mut(idx) {
                             match comp {
+                                ComponentPayload::Shape(b) => {
+                                    let shift_x = new_x - b.x1;
+                                    let shift_y = new_y - b.y1;
+                                    b.x1 += shift_x; b.x2 += shift_x;
+                                    b.y1 += shift_y; b.y2 += shift_y;
+                                }
                                 ComponentPayload::PenStroke(stroke) | ComponentPayload::EraserStroke(stroke) => {
                                     let first = stroke.points.first().copied().unwrap_or((0.0, 0.0));
                                     let shift_x = new_x - first.0;
@@ -319,6 +333,12 @@ pub(crate) fn setup_canvas_events(
                     st.current_page_data.components.remove(idx);
                     c.queue_draw();
                 }
+            } else if let Tool::Shape(_) = tool {
+                if let Some(ref mut shape) = s.borrow_mut().current_shape {
+                    shape.x2 = px;
+                    shape.y2 = py;
+                }
+                c.queue_draw();
             }
         }
         Propagation::Proceed
@@ -359,6 +379,12 @@ pub(crate) fn setup_canvas_events(
                         for &(idx, orig_x, orig_y) in &orig_positions {
                             if let Some(comp) = st.current_page_data.components.get_mut(idx) {
                                 match comp {
+                                    ComponentPayload::Shape(b) => {
+                                        let shift_x = orig_x - b.x1;
+                                        let shift_y = orig_y - b.y1;
+                                        b.x1 += shift_x; b.x2 += shift_x;
+                                        b.y1 += shift_y; b.y2 += shift_y;
+                                    }
                                     ComponentPayload::PenStroke(stroke) | ComponentPayload::EraserStroke(stroke) => {
                                         let first = stroke.points.first().copied().unwrap_or((0.0, 0.0));
                                         let shift_x = orig_x - first.0;
@@ -500,6 +526,17 @@ pub(crate) fn setup_canvas_events(
                 w.set_title(&title);
                 c.queue_draw();
                 return Propagation::Proceed;
+            } else if let Tool::Shape(_) = tool {
+                if let Some(shape) = st.current_shape.take() {
+                    if (shape.x2 - shape.x1).abs() > 2.0 || (shape.y2 - shape.y1).abs() > 2.0 {
+                        st.commit_component(ComponentPayload::Shape(shape));
+                        let title = st.window_title();
+                        drop(st);
+                        w.set_title(&title);
+                        c.queue_draw();
+                        return Propagation::Proceed;
+                    }
+                }
             }
 
             drop(st);

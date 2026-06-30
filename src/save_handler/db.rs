@@ -68,6 +68,15 @@ pub fn bounding_box(payload: &ComponentPayload) -> (f64, f64, f64, f64) {
             };
             (block.x, block.x + w, block.y, block.y + h)
         }
+        ComponentPayload::Shape(block) => {
+            let half_w = block.width / 2.0;
+            (
+                block.x1.min(block.x2) - half_w,
+                block.x1.max(block.x2) + half_w,
+                block.y1.min(block.y2) - half_w,
+                block.y1.max(block.y2) + half_w,
+            )
+        }
     }
 }
 

@@ -32,6 +32,7 @@ pub fn draw_live_stroke(cr: &cairo::Context, stroke: &Stroke, tool: &page::Tool,
 
         page::Tool::Text => return,
         page::Tool::Select => return,
+        page::Tool::Shape(_) => return,
     }
     
     cr.set_line_width(stroke.width);
