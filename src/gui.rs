@@ -136,7 +136,7 @@ pub fn build_ui(app: &gtk::Application) {
         });
     }
 
-    let page_listbox = setup_sidebar(&builder);
+    let page_listbox = setup_sidebar(&builder, &state);
     let (btn_save, btn_open) = setup_toolbar(
         &builder,
         &state,
@@ -170,6 +170,9 @@ pub fn build_ui(app: &gtk::Application) {
     setup_window_close(&window, &state);
 
     refresh_sidebar(&state, &page_listbox, &canvas, &spin_page, &lbl_tot);
+
+    state.borrow_mut().rebuild_bookmark_index();
+    window.show_all();
 
     window.show_all();
 }

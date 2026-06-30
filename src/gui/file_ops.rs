@@ -191,6 +191,14 @@ pub(crate) fn setup_file_ops(
         if let Err(e) = st.init_new_document() {
             eprintln!("Errore creazione nuovo doc: {}", e);
         }
+        
+        // --- FIX SEGNALIBRI: Pulisce l'indice essendo un file nuovo ---
+        st.rebuild_bookmark_index();
+        if let Some(cb) = &st.update_bookmark_ui {
+            cb(false); // Il nuovo documento parte senza preferiti nella prima pagina
+        }
+        // --------------------------------------------------------------
+
         let title = st.window_title();
         drop(st);
 
@@ -297,8 +305,28 @@ pub(crate) fn setup_file_ops(
                 Ok(Ok(res)) => {
                     if let Some(ld) = lw.upgrade() { unsafe { ld.destroy(); } }
                     autosave::write_autosave_sentinel(res.bundle_path.as_ref());
+                    
                     let mut st = s_clone.borrow_mut();
-                    st.page_count = res.page_count; st.current_page = 0; st.current_page_id = res.first_id; st.current_page_data = res.first_page; st.bundle_path = res.bundle_path; st.is_modified = false; st.db_tmp_path = Some(res.tmp); st.db = Some(res.conn); st.undo_stack.clear(); st.redo_stack.clear();
+                    st.page_count = res.page_count; 
+                    st.current_page = 0; 
+                    st.current_page_id = res.first_id; 
+                    st.current_page_data = res.first_page; 
+                    st.bundle_path = res.bundle_path; 
+                    st.is_modified = false; 
+                    st.db_tmp_path = Some(res.tmp); 
+                    st.db = Some(res.conn); 
+                    st.undo_stack.clear(); 
+                    st.redo_stack.clear();
+
+                    // --- FIX SEGNALIBRI: Ricarica l'indice dal nuovo database ---
+                    st.rebuild_bookmark_index();
+                    
+                    // --- FIX UI: Aggiorna il bottone se la pagina 1 è un segnalibro ---
+                    let is_bk = st.current_page_data.is_bookmarked;
+                    if let Some(cb) = &st.update_bookmark_ui {
+                        cb(is_bk);
+                    }
+                    // -------------------------------------------------------------
 
                     if let Some(ref bp) = st.bundle_path.clone() {
                         if bp.extension().and_then(|e| e.to_str()) == Some("rastin") {

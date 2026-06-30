@@ -15,9 +15,9 @@ lazy_static::lazy_static! {
     ];
 }
 
-pub(crate) fn setup_sidebar(builder: &gtk::Builder) -> gtk::ListBox {
-    
+pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>>) -> gtk::ListBox {
     let sidebar_scrolled: gtk::ScrolledWindow = builder.object("first_panel_sidebar").expect("first_panel_sidebar non trovata");
+    let sidebar_container: gtk::Box = builder.object("sidebar_container").expect("sidebar_container non trovata");
     
     for child in sidebar_scrolled.children() { sidebar_scrolled.remove(&child); }
 
@@ -32,13 +32,57 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder) -> gtk::ListBox {
     if let Err(e) = css_provider.load_from_data(dark_css) {
         eprintln!("Errore nel caricamento del CSS della sidebar: {}", e);
     }
-    page_listbox.style_context().add_provider(
-        &css_provider,
-        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
-    
+    page_listbox.style_context().add_provider(&css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
     sidebar_scrolled.add(&page_listbox);
-    page_listbox
+
+    // Creiamo la SearchBar per i segnalibri
+    let search_entry = gtk::SearchEntry::new();
+    search_entry.set_placeholder_text(Some("Cerca nei segnalibri..."));
+    search_entry.set_margin_start(8);
+    search_entry.set_margin_end(8);
+    search_entry.set_margin_bottom(8);
+    
+    // Inseriamo la searchbar sotto lo ScrolledWindow
+    sidebar_container.pack_end(&search_entry, false, false, 0);
+    sidebar_container.reorder_child(&search_entry, -1);
+
+    // LOGICA DI RICERCA TRAMITE TRIE
+    let s_search = state.clone();
+    let lb_search = page_listbox.clone();
+    search_entry.connect_search_changed(move |entry| {
+        let query = entry.text().to_string().to_lowercase();
+        s_search.borrow_mut().search_query = query;
+        lb_search.invalidate_filter(); // Forza il re-rendering basato sulla funzione filtro
+    });
+
+    let s_filter = state.clone();
+    page_listbox.set_filter_func(Some(Box::new(move |row: &gtk::ListBoxRow| {
+        let st = s_filter.borrow();
+        let idx = row.index() as usize;
+
+        if st.search_query.is_empty() {
+            return true; // Se la barra è vuota, mostriamo sia "Pagina N" che i Segnalibri
+        }
+
+        // Se stai cercando qualcosa, mostra SOLO le pagine salvate nei preferiti...
+        if !st.bookmarked_pages.contains(&idx) {
+            return false;
+        }
+
+        // ...che corrispondono a ciò che hai scritto
+        let terms: Vec<&str> = st.search_query.split_whitespace().collect();
+        for term in terms {
+            if let Some(pages) = st.bookmark_trie.search(term) {
+                if !pages.contains(&idx) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    })));
+   page_listbox
 }
 
 pub fn refresh_sidebar(
@@ -66,11 +110,34 @@ pub fn refresh_sidebar(
         let thumb_canvas = gtk::DrawingArea::new();
         thumb_canvas.set_size_request(100, 140); 
         
+        // --- LOGICA NOMI E SEGNALIBRI ---
+        let mut page_label = format!("Pagina {}", i + 1);
+        let mut is_bk = false;
+        let mut current_page_id = -1;
+
+        if let Some(conn) = &state.borrow().db {
+            if let Ok(page_id) = page_id_at(conn, i) {
+                current_page_id = page_id;
+                // Query leggerissima per leggere solo il nome senza toccare i dati di disegno
+                if let Ok((b_val, b_name)) = conn.query_row(
+                    "SELECT is_bookmarked, bookmark_name FROM pages WHERE id = ?1",
+                    rusqlite::params![page_id],
+                    |r| Ok((r.get::<_, i64>(0).unwrap_or(0), r.get::<_, Option<String>>(1).unwrap_or(None)))
+                ) {
+                    is_bk = b_val != 0;
+                    if is_bk {
+                        if let Some(name) = b_name {
+                            page_label = name;
+                        }
+                    }
+                }
+            }
+        }
+
         let s_clone = state.clone();
         thumb_canvas.connect_draw(move |_, cr| {
             cr.set_source_rgb(1.0, 1.0, 1.0);
             cr.paint().unwrap();
-
             if let Some(conn) = &s_clone.borrow().db {
                 if let Ok(page_id) = page_id_at(conn, i) {
                     if let Ok(page_data) = load_page(conn, page_id) {
@@ -83,10 +150,52 @@ pub fn refresh_sidebar(
             Propagation::Proceed
         });
 
-        let label = gtk::Label::new(Some(&format!("Pagina {}", i + 1)));
+        // Contenitore Orizzontale per Nome + Tasto Cancella Segnalibro
+        let label = gtk::Label::new(Some(&page_label));
+        label.set_line_wrap(true);
+        label.set_max_width_chars(15);
+        label.set_justify(gtk::Justification::Center);
+
+        let label_box = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        label_box.set_halign(gtk::Align::Center);
+        label_box.pack_start(&label, true, true, 0);
+
+        // Se è un segnalibro, creiamo il pulsante per rimuoverlo
+        if is_bk {
+            let btn_rm = gtk::Button::from_icon_name(Some("edit-delete-symbolic"), gtk::IconSize::Button);
+            btn_rm.set_tooltip_text(Some("Rimuovi dai Segnalibri"));
+            btn_rm.set_relief(gtk::ReliefStyle::None);
+            
+            let s_rm = state.clone(); let lb_rm = listbox.clone(); let c_rm = canvas.clone();
+            let sp_rm = spin_page.clone(); let lt_rm = lbl_tot.clone();
+            let p_id = current_page_id;
+            
+            btn_rm.connect_clicked(move |_| {
+                let mut st = s_rm.borrow_mut();
+                if let Some(conn) = &st.db {
+                    // Impostiamo is_bookmarked a 0 e nome a NULL nel DB
+                    let _ = update_bookmark_status(conn, p_id, false, None);
+                }
+                
+                // Se stavamo guardando proprio questa pagina, aggiorniamo il tasto della toolbar
+                if st.current_page_id == p_id {
+                    st.current_page_data.is_bookmarked = false;
+                    st.current_page_data.bookmark_name = None;
+                    if let Some(cb) = &st.update_bookmark_ui { cb(false); }
+                }
+                
+                st.rebuild_bookmark_index();
+                drop(st);
+                
+                // Ridisegniamo la sidebar: il nome tornerà automaticamente a "Pagina N" in base all'ordine attuale!
+                refresh_sidebar(&s_rm, &lb_rm, &c_rm, &sp_rm, &lt_rm);
+                lb_rm.invalidate_filter();
+            });
+            label_box.pack_start(&btn_rm, false, false, 0);
+        }
 
         vbox.pack_start(&thumb_canvas, false, false, 0);
-        vbox.pack_start(&label, false, false, 0);
+        vbox.pack_start(&label_box, false, false, 0);
         event_box.add(&vbox);
         row.add(&event_box);
         

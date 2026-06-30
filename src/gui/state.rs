@@ -73,8 +73,40 @@ pub struct AppState {
     pub previous_tool: Option<Tool>,
     pub active_temp_trigger: Option<EventTrigger>,
     pub update_toolbar_ui: Option<Rc<dyn Fn(&Tool)>>,
-
+    
+    pub update_bookmark_ui: Option<Rc<dyn Fn(bool)>>, // Callback per il tasto
+    
+    pub search_query: String,
+    pub bookmark_trie: SearchTrieNode,
+    pub bookmarked_pages: std::collections::HashSet<usize>, // Solo per filtering veloce
+    
     pub current_shape: Option<ShapeBlock>,
+}
+
+#[derive(Default, Debug)]
+pub struct SearchTrieNode {
+    children: std::collections::HashMap<char, SearchTrieNode>,
+    pub pages: std::collections::HashSet<usize>,
+}
+
+impl SearchTrieNode {
+    pub fn insert(&mut self, word: &str, page_idx: usize) {
+        let mut node = self;
+        for c in word.chars() {
+            node.pages.insert(page_idx); // Inserisce in ogni prefisso!
+            node = node.children.entry(c).or_default();
+        }
+        node.pages.insert(page_idx); // Inserisce alla fine della parola
+    }
+
+    pub fn search(&self, prefix: &str) -> Option<&std::collections::HashSet<usize>> {
+        let mut node = self;
+        for c in prefix.chars() {
+            if let Some(n) = node.children.get(&c) { node = n; } 
+            else { return None; }
+        }
+        Some(&node.pages)
+    }
 }
 
 impl AppState {
@@ -115,7 +147,12 @@ impl AppState {
             previous_tool: None,
             active_temp_trigger: None,
             update_toolbar_ui: None,
-
+            update_bookmark_ui: None,
+            
+            search_query: String::new(),
+            bookmark_trie: SearchTrieNode::default(),
+            bookmarked_pages: std::collections::HashSet::new(),
+            
             current_shape: None,
         }
     }
@@ -155,20 +192,53 @@ impl AppState {
         Ok(())
     }
 
-    pub fn switch_to_page(&mut self, new_index: usize) -> rusqlite::Result<()> {
-        if new_index == self.current_page {
-            return Ok(());
+    // Ricostruisce il Trie leggendo il database. Chiamato all'avvio o quando un bookmark cambia.
+    pub fn rebuild_bookmark_index(&mut self) {
+        self.bookmark_trie = SearchTrieNode::default();
+        self.bookmarked_pages.clear();
+
+        if let Some(conn) = &self.db {
+            // Estraiamo id, ordine e nome direttamente, senza aprire i Blob pesanti delle pagine
+            if let Ok(mut stmt) = conn.prepare("SELECT id, display_order, bookmark_name FROM pages WHERE is_bookmarked = 1") {
+                let iter = stmt.query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)? as usize,
+                        row.get::<_, Option<String>>(2)?
+                    ))
+                }).unwrap();
+                
+                for res in iter.flatten() {
+                    let (id, idx, name_opt) = res;
+                    self.bookmarked_pages.insert(idx);
+                    
+                    if let Some(name) = name_opt {
+                        let text = name.to_lowercase();
+                        // Inseriamo la parola intera e ogni frammento per la ricerca as-you-type
+                        self.bookmark_trie.insert(&text, idx);
+                        for word in text.split_whitespace() {
+                            self.bookmark_trie.insert(word, idx);
+                        }
+                    }
+                }
+            }
         }
+    }
+    // Sostituisci il vecchio switch_to_page con questo che aggiorna l'UI del segnalibro
+    pub fn switch_to_page(&mut self, new_index: usize) -> rusqlite::Result<()> {
+        if new_index == self.current_page { return Ok(()); }
         if let Some(conn) = &self.db {
             let new_id = page_id_at(conn, new_index)?;
             let page = load_page(conn, new_id)?;
             self.current_page = new_index;
             self.current_page_id = new_id;
             self.paper_background = page.background.clone();
-            self.current_page_data = page;
-
-            //self.undo_stack.clear();
-            //self.redo_stack.clear();
+            self.current_page_data = page.clone();
+            
+            // Aggiorna l'icona del segnalibro in base allo stato della nuova pagina
+            if let Some(cb) = &self.update_bookmark_ui {
+                cb(page.is_bookmarked);
+            }
         }
         Ok(())
     }

@@ -257,11 +257,117 @@ pub(crate) fn setup_toolbar(
     add_item!(&btn_thick);
 
     let btn_add_page = make_btn("page-add.svg", "Aggiungi nuova pagina");
+    
+    let btn_bookmark = gtk::ToggleButton::new();
+    btn_bookmark.set_image(Some(&gtk::Image::from_icon_name(Some("bookmark-new"), gtk::IconSize::Button)));
+    btn_bookmark.set_tooltip_text(Some("Imposta/Rimuovi Segnalibro"));
+    btn_bookmark.set_always_show_image(true);
+    btn_bookmark.set_relief(gtk::ReliefStyle::None);
+
     let btn_del_page = make_btn("page-delete.svg", "Elimina pagina corrente");
+
+    {
+        let s = state.clone();
+        let w = window.clone();
+        let lb = page_listbox.clone();
+        let btn = btn_bookmark.clone();
+
+        btn.connect_toggled(move |b| {
+            let is_active = b.is_active();
+
+            // 1. Controlliamo se serve fare qualcosa usando un borrow CORTISSIMO (solo lettura)
+            let (needs_update, page_id) = {
+                let st = s.borrow();
+                if st.current_page_data.is_bookmarked == is_active {
+                    (false, 0)
+                } else {
+                    (true, st.current_page_id)
+                }
+            };
+
+            // Se non c'è nulla da aggiornare usciamo subito
+            if !needs_update { return; }
+
+            let mut custom_name = None;
+            let mut user_cancelled = false;
+
+            // 2. Apriamo il popup QUANDO NESSUN BORROW E' ATTIVO!
+            if is_active {
+                let dialog = gtk::Dialog::with_buttons(
+                    Some("Nuovo Segnalibro"),
+                    Some(&w),
+                    gtk::DialogFlags::MODAL,
+                    &[("Annulla", gtk::ResponseType::Cancel), ("Salva", gtk::ResponseType::Ok)],
+                );
+                let content_area = dialog.content_area();
+                let entry = gtk::Entry::new();
+                entry.set_placeholder_text(Some("Inserisci un nome (opzionale)"));
+                entry.set_margin_top(10);
+                entry.set_margin_bottom(10);
+                entry.set_margin_start(10);
+                entry.set_margin_end(10);
+                content_area.pack_start(&entry, true, true, 0);
+                dialog.show_all();
+
+                // L'app aspetta qui, ma lo stato non è bloccato, 
+                // quindi le miniature nella sidebar possono disegnarsi liberamente!
+                if dialog.run() == gtk::ResponseType::Ok {
+                    let text = entry.text().to_string();
+                    if !text.is_empty() {
+                        custom_name = Some(text);
+                    }
+                } else {
+                    user_cancelled = true;
+                }
+                unsafe { dialog.destroy(); }
+            }
+
+            // 3. Ora che il popup è chiuso, riprendiamo il controllo dello stato per salvare i cambiamenti
+            let mut st = s.borrow_mut();
+
+            if user_cancelled {
+                st.current_page_data.is_bookmarked = false;
+                drop(st); // Fondamentale chiuderlo prima di toccare di nuovo l'UI!
+                b.set_active(false);
+                return;
+            }
+
+            st.current_page_data.is_bookmarked = is_active;
+            if is_active {
+                st.current_page_data.bookmark_name = custom_name.clone();
+            } else {
+                st.current_page_data.bookmark_name = None;
+            }
+
+            if let Some(conn) = &st.db {
+                let _ = crate::save_handler::db::update_bookmark_status(conn, page_id, is_active, custom_name.as_deref());
+            }
+
+            st.rebuild_bookmark_index();
+            
+            // 4. Fondamentale rilasciare il mut prima di invalidare la listbox
+            drop(st); 
+            lb.invalidate_filter(); // Forza la lista ad aggiornarsi
+        });
+
+    }
+
+    // Registriamo la callback per aggiornare il tasto segnalibro quando si cambia pagina!
+    // Registriamo la callback per aggiornare il tasto segnalibro quando si cambia pagina!
+    let cb_bookmark = btn_bookmark.clone();
+    state.borrow_mut().update_bookmark_ui = Some(Rc::new(move |is_bk| {
+        let cb = cb_bookmark.clone();
+        // Usiamo l'idle_add per ritardare l'aggiornamento visivo di qualche millisecondo,
+        // permettendo alla funzione chiamante (come switch_to_page) di rilasciare i borrow!
+        gtk::glib::idle_add_local_once(move || {
+            cb.set_active(is_bk);
+        });
+    }));
 
     add_sep!();
     add_item!(&btn_add_page);
     add_item!(&btn_del_page);
+    add_item!(&btn_bookmark);
 
     {
         let s = state.clone();

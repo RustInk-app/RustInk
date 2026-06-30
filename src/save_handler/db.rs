@@ -91,19 +91,16 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             display_order INTEGER NOT NULL,
             created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-            background    INTEGER NOT NULL DEFAULT 0
+            background    INTEGER NOT NULL DEFAULT 0,
+            is_bookmarked INTEGER NOT NULL DEFAULT 0,
+            bookmark_name TEXT
         );
 
-        -- Each stroke is not stored as a point but as a BLOB 
-        -- (think of it as an array) of bytes.
-        
         CREATE TABLE IF NOT EXISTS base_layers (
             page_id    INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
             baked_blob BLOB NOT NULL
         );
 
-        -- Each component can be active or not. If it's visible on the screen, it's active; otherwise, it's not. 
-        -- Use case: If the user presses CTRL+Z on something they've just inserted, it's no longer visible.
         CREATE TABLE IF NOT EXISTS active_components (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             page_id   INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -111,13 +108,14 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             payload   BLOB    NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS idx_ac_page
-            ON active_components(page_id, is_active);
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS component_rtree
-            USING rtree(id, minX, maxX, minY, maxY);
+        CREATE INDEX IF NOT EXISTS idx_ac_page ON active_components(page_id, is_active);
+        CREATE VIRTUAL TABLE IF NOT EXISTS component_rtree USING rtree(id, minX, maxX, minY, maxY);
     ",
     )?;
+
+    // Fallback sicuro per aggiungere le colonne se il database esisteva già in precedenza
+    let _ = conn.execute("ALTER TABLE pages ADD COLUMN is_bookmarked INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE pages ADD COLUMN bookmark_name TEXT", []);
 
     Ok(())
 }
@@ -265,13 +263,13 @@ pub fn load_page_full(
     conn: &Connection,
     page_id: i64,
 ) -> rusqlite::Result<(PageData, Vec<(i64, ComponentPayload)>)> {
-    let bg_int: i64 = conn
+    let (bg_int, is_bk, bk_name): (i64, i64, Option<String>) = conn
         .query_row(
-            "SELECT background FROM pages WHERE id = ?1",
+            "SELECT background, is_bookmarked, bookmark_name FROM pages WHERE id = ?1",
             params![page_id],
-            |r| r.get(0),
+            |r| Ok((r.get(0).unwrap_or(0), r.get(1).unwrap_or(0), r.get(2).unwrap_or(None))),
         )
-        .unwrap_or(0);
+        .unwrap_or((0, 0, None));
 
     let background = match bg_int {
         1 => PaperBackground::Plain,
@@ -323,9 +321,19 @@ pub fn load_page_full(
         PageData {
             components,
             background,
+            is_bookmarked: is_bk != 0,
+            bookmark_name: bk_name,
         },
         active_only,
     ))
+}
+
+pub fn update_bookmark_status(conn: &Connection, page_id: i64, is_bookmarked: bool, name: Option<&str>) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE pages SET is_bookmarked = ?1, bookmark_name = ?2 WHERE id = ?3",
+        params![is_bookmarked as i64, name, page_id],
+    )?;
+    Ok(())
 }
 
 pub fn load_page(conn: &Connection, page_id: i64) -> rusqlite::Result<PageData> {

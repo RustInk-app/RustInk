@@ -69,6 +69,8 @@ impl Default for PaperBackground {
 pub struct PageData {
     pub components: Vec<ComponentPayload>,
     pub background: PaperBackground,
+    pub is_bookmarked: bool,
+    pub bookmark_name: Option<String>,
 }
 
 impl PageData {
@@ -76,6 +78,8 @@ impl PageData {
         Self {
             components: Vec::new(),
             background: PaperBackground::Grid, 
+            is_bookmarked: false,
+            bookmark_name: None,
         }
     }
 }
