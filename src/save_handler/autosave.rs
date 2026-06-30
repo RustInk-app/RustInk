@@ -121,6 +121,7 @@ pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {
 
     if all_backups.is_empty() {
         eprintln!("[RECOVERY] Nessun backup precedente trovato.");
+        clear_old_sessions();
         return None;
     }
     

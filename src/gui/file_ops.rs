@@ -445,6 +445,13 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
             }
         }
         s.borrow_mut().release_lock();
+
+        if let Ok(entries) = std::fs::read_dir(autosave::backup_dir()) {
+            for entry in entries.flatten() {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+
         win.hide();
         Propagation::Proceed
     });

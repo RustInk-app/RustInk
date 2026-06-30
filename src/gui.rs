@@ -12,6 +12,11 @@ use gtk::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::save_handler::autosave::*;
+use crate::save_handler::db::*;
+
+use crate::check_recovery;
+
 use crate::gui::canvas_events::*;
 use crate::gui::drawing::*;
 use crate::gui::file_ops::*;
@@ -19,21 +24,65 @@ use crate::gui::shortcuts::*;
 use crate::gui::sidebar::*;
 use crate::gui::state::*;
 use crate::gui::toolbar::*;
-use crate::save_handler::*;
-use crate::save_handler::autosave::*;
 
 use crate::models::page::PaperBackground;
 
 use glib::Propagation;
 
-// TODO: check_recovery totally bugged
-
 pub fn build_ui(app: &gtk::Application) {
     
     let state = Rc::new(RefCell::new(AppState::new()));
 
-    if let Err(e) = state.borrow_mut().init_new_document() {
-        eprintln!("Errore inizializzazione DB: {e}");
+    match check_recovery() 
+    {
+        Some((backup_path, original_bundle)) => {
+            let tmp = temp_db_dir();
+            let recovered = import_bundle(&backup_path, &tmp)
+                .map_err(|e| e.to_string())
+                .and_then(|_| rusqlite::Connection::open(&tmp).map_err(|e| e.to_string()));
+
+            match recovered {
+                Ok(conn) => {
+                    let count = page_count(&conn).unwrap_or(1);
+                    let first_id = page_id_at(&conn, 0).unwrap_or(1);
+                    let first_page = load_page(&conn, first_id).unwrap_or_default();
+
+                    let mut st = state.borrow_mut();
+                    st.page_count = count;
+                    st.current_page = 0;
+                    st.current_page_id = first_id;
+                    st.paper_background = first_page.background.clone();
+                    st.current_page_data = first_page;
+                    st.bundle_path = original_bundle.clone();
+                    st.is_modified = true; // recuperato ma non ancora ri-salvato nel file originale
+                    st.db_tmp_path = Some(tmp);
+                    st.db = Some(conn);
+                    st.undo_stack.clear();
+                    st.redo_stack.clear();
+
+                    if let Some(bp) = &original_bundle {
+                        if bp.extension().and_then(|e| e.to_str()) == Some("rastin") {
+                            let _ = st.acquire_lock(bp);
+                        }
+                    }
+                    drop(st);
+
+                    // Il backup è stato importato: la vecchia cartella di sessione crashata può sparire
+                    clear_old_sessions();
+                }
+                Err(e) => {
+                    eprintln!("[RECOVERY] Errore import backup: {e}");
+                    if let Err(e) = state.borrow_mut().init_new_document() {
+                        eprintln!("Errore inizializzazione DB: {e}");
+                    }
+                }
+            }
+        }
+        None => {
+            if let Err(e) = state.borrow_mut().init_new_document() {
+                eprintln!("Errore inizializzazione DB: {e}");
+            }
+        }
     }
 
     let glade_src = include_str!("ui/menu.glade");

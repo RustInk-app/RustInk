@@ -145,8 +145,8 @@ impl AppState {
             self.paper_background = page.background.clone();
             self.current_page_data = page;
 
-            self.undo_stack.clear();
-            self.redo_stack.clear();
+            //self.undo_stack.clear();
+            //self.redo_stack.clear();
         }
         Ok(())
     }

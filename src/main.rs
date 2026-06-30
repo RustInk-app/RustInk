@@ -10,6 +10,8 @@ use crate::models::page;
 use crate::models::stroke;
 
 use crate::gui::build_ui;
+use crate::save_handler::autosave::*;
+use crate::save_handler::db::*;
 
 use gtk::prelude::*;
 use gtk::{Application};

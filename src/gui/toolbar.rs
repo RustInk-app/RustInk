@@ -242,8 +242,8 @@ pub(crate) fn setup_toolbar(
                         let mut new_page = crate::models::page::PageData::new();
                         new_page.background = current_bg;
                         st.current_page_data = new_page;
-                        st.undo_stack.clear();
-                        st.redo_stack.clear();
+                        // st.undo_stack.clear();
+                        // st.redo_stack.clear();
                     }
                     Err(e) => eprintln!("Errore inserimento pagina: {e}"),
                 }
@@ -292,8 +292,8 @@ pub(crate) fn setup_toolbar(
                     st.current_page = new_idx;
                     st.current_page_id = new_id;
                     st.current_page_data = page_data;
-                    st.undo_stack.clear();
-                    st.redo_stack.clear();
+                    // st.undo_stack.clear();
+                    // st.redo_stack.clear();
                 }
                 let page_count = st.page_count;
                 let current_page = st.current_page;
