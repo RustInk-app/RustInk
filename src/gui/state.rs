@@ -23,7 +23,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum EventTrigger {
+    Mouse(u32),
+    Key(String),
+}
+
 pub struct AppState {
     pub db: Option<rusqlite::Connection>,
     pub db_tmp_path: Option<PathBuf>,
@@ -59,8 +64,16 @@ pub struct AppState {
     pub image_cache: RefCell<std::collections::HashMap<String, cairo::ImageSurface>>,
     pub selected_indices: Vec<usize>,
     pub paper_background: PaperBackground,
-    pub pref_button_2_tool: Option<Tool>,
-    pub pref_button_3_tool: Option<Tool>,
+    
+    // Nuovi campi per le preferenze e hold-to-switch
+    pub pref_trigger_1: Option<EventTrigger>,
+    pub pref_tool_1: Option<Tool>,
+    pub pref_trigger_2: Option<EventTrigger>,
+    pub pref_tool_2: Option<Tool>,
+    pub previous_tool: Option<Tool>,
+    pub active_temp_trigger: Option<EventTrigger>,
+    pub update_toolbar_ui: Option<Rc<dyn Fn(&Tool)>>,
+
     pub current_shape: Option<ShapeBlock>,
 }
 
@@ -94,8 +107,15 @@ impl AppState {
             image_cache: RefCell::new(std::collections::HashMap::new()),
             selected_indices: Vec::new(),
             paper_background: PaperBackground::Grid,
-            pref_button_2_tool: None,
-            pref_button_3_tool: None,
+            
+            pref_trigger_1: None,
+            pref_tool_1: None,
+            pref_trigger_2: None,
+            pref_tool_2: None,
+            previous_tool: None,
+            active_temp_trigger: None,
+            update_toolbar_ui: None,
+
             current_shape: None,
         }
     }

@@ -347,5 +347,23 @@ pub(crate) fn setup_toolbar(
         });
     }
 
+    let cb_pen = btn_tool_pen.clone();
+    let cb_eraser = btn_tool_eraser.clone();
+    let cb_text = btn_tool_text.clone();
+    let cb_sel = btn_tool_select.clone();
+    let cb_shape = btn_tool_shape.clone();
+
+    // Creiamo una callback per aggiornare i tasti visivamente
+    let update_ui = Rc::new(move |tool: &Tool| {
+        match tool {
+            Tool::Pen => cb_pen.set_active(true),
+            Tool::Eraser => cb_eraser.set_active(true),
+            Tool::Text => cb_text.set_active(true),
+            Tool::Select => cb_sel.set_active(true),
+            Tool::Shape(_) => cb_shape.set_active(true),
+        }
+    });
+    state.borrow_mut().update_toolbar_ui = Some(update_ui);
+
     (btn_save, btn_open)
 }

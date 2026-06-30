@@ -178,18 +178,27 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     let menu_pref: gtk::MenuItem = builder.object("file_preferences").unwrap();
     let dialog: gtk::Dialog = builder.object("preferences_dialog").unwrap();
 
+    // Fix per la macro clone!: specifichiamo @default-return
+    dialog.connect_delete_event(clone!(@weak dialog => @default-return Propagation::Stop, move |_, _| {
+        dialog.hide();
+        Propagation::Stop
+    }));
+
     let combo1: gtk::ComboBoxText = builder.object("choice_tool_first_button").unwrap();
     let combo2: gtk::ComboBoxText = builder.object("choice_tool_second_button").unwrap();
     let box1: gtk::ButtonBox = builder.object("first_button_event_listener").unwrap();
     let box2: gtk::ButtonBox = builder.object("second_button_event_listener").unwrap();
     let btn_ok: gtk::Button = builder.object("btn_pref_ok").expect("OK non trovato");
+    let btn_cancel: gtk::Button = builder.object("btn_pref_cancel").expect("Cancel non trovato");
+
+    btn_cancel.connect_clicked(clone!(@weak dialog => move |_| {
+        dialog.hide();
+    }));
 
     for tool_name in &["Nessuno", "Penna", "Gomma", "Testo", "Seleziona"] {
         combo1.append_text(tool_name);
         combo2.append_text(tool_name);
     }
-    combo1.set_active(Some(0));
-    combo2.set_active(Some(0));
 
     let btn_key1 = gtk::Button::with_label("Clicca e premi un tasto...");
     let btn_key2 = gtk::Button::with_label("Clicca e premi un tasto...");
@@ -198,32 +207,35 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     box1.add(&btn_key1);
     box2.add(&btn_key2);
 
-    let setup_listener = |btn: &gtk::Button| {
+    let trigger1 = Rc::new(RefCell::new(None::<EventTrigger>));
+    let trigger2 = Rc::new(RefCell::new(None::<EventTrigger>));
+
+    let setup_listener = |btn: &gtk::Button, trigger_ref: Rc<RefCell<Option<EventTrigger>>>| {
         btn.connect_clicked(|b| b.set_label("In ascolto..."));
 
-        btn.connect_key_press_event(|b, ev| {
+        btn.connect_key_press_event(clone!(@strong trigger_ref => move |b, ev| {
             let name = ev.keyval().name().unwrap_or_else(|| "Sconosciuto".into());
             b.set_label(&name);
+            *trigger_ref.borrow_mut() = Some(EventTrigger::Key(name.to_string()));
             Propagation::Stop
-        });
+        }));
 
-        btn.connect_button_press_event(|b, ev| {
+        btn.connect_button_press_event(clone!(@strong trigger_ref => move |b, ev| {
             let btn_num = ev.button();
             if btn_num == 1 {
                 return Propagation::Proceed;
             }
             b.set_label(&format!("Mouse Button {}", btn_num));
+            *trigger_ref.borrow_mut() = Some(EventTrigger::Mouse(btn_num));
             Propagation::Stop
-        });
+        }));
     };
 
-    setup_listener(&btn_key1);
-    setup_listener(&btn_key2);
+    setup_listener(&btn_key1, trigger1.clone());
+    setup_listener(&btn_key2, trigger2.clone());
 
     btn_ok.connect_clicked(
-        clone!(@weak dialog, @strong state, @weak combo1, @weak combo2 => move |_| {
-            let mut st = state.borrow_mut();
-
+        clone!(@weak dialog, @strong state, @weak combo1, @weak combo2, @strong trigger1, @strong trigger2 => move |_| {
             let map_tool = |txt: Option<String>| match txt.as_deref() {
                 Some("Penna") => Some(crate::models::page::Tool::Pen),
                 Some("Gomma") => Some(crate::models::page::Tool::Eraser),
@@ -232,14 +244,62 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
                 _ => None,
             };
 
-            st.pref_button_2_tool = map_tool(combo1.active_text().map(|s| s.to_string()));
-            st.pref_button_3_tool = map_tool(combo2.active_text().map(|s| s.to_string()));
+            let t1 = map_tool(combo1.active_text().map(|s| s.to_string()));
+            let t2 = map_tool(combo2.active_text().map(|s| s.to_string()));
+            let trig1 = trigger1.borrow().clone();
+            let trig2 = trigger2.borrow().clone();
+
+            // Validazione: stesso tasto ma tool differenti
+            if trig1.is_some() && trig1 == trig2 && t1 != t2 {
+                let alert = gtk::MessageDialog::new(
+                    Some(&dialog),
+                    gtk::DialogFlags::MODAL,
+                    gtk::MessageType::Warning,
+                    gtk::ButtonsType::Ok,
+                    "Conflitto di scorciatoie",
+                );
+                alert.set_secondary_text(Some("Hai assegnato lo stesso tasto a due strumenti differenti. Scegli strumenti uguali o tasti diversi per procedere."));
+                alert.run();
+                unsafe { alert.destroy(); }
+                return;
+            }
+
+            let mut st = state.borrow_mut();
+            st.pref_tool_1 = t1;
+            st.pref_tool_2 = t2;
+            st.pref_trigger_1 = trig1;
+            st.pref_trigger_2 = trig2;
 
             dialog.hide();
         }),
     );
 
-    menu_pref.connect_activate(clone!(@weak dialog => move |_| dialog.show_all()));
+    menu_pref.connect_activate(clone!(@weak dialog, @strong state, @weak combo1, @weak combo2, @weak btn_key1, @weak btn_key2, @strong trigger1, @strong trigger2 => move |_| {
+        let st = state.borrow();
+        
+        let unmap_tool = |t: &Option<crate::models::page::Tool>| match t {
+            Some(crate::models::page::Tool::Pen) => 1,
+            Some(crate::models::page::Tool::Eraser) => 2,
+            Some(crate::models::page::Tool::Text) => 3,
+            Some(crate::models::page::Tool::Select) => 4,
+            _ => 0,
+        };
+        combo1.set_active(Some(unmap_tool(&st.pref_tool_1)));
+        combo2.set_active(Some(unmap_tool(&st.pref_tool_2)));
+
+        let format_trigger = |t: &Option<EventTrigger>| match t {
+            Some(EventTrigger::Mouse(b)) => format!("Mouse Button {}", b),
+            Some(EventTrigger::Key(k)) => k.clone(),
+            None => "Clicca e premi un tasto...".to_string(),
+        };
+        btn_key1.set_label(&format_trigger(&st.pref_trigger_1));
+        btn_key2.set_label(&format_trigger(&st.pref_trigger_2));
+
+        *trigger1.borrow_mut() = st.pref_trigger_1.clone();
+        *trigger2.borrow_mut() = st.pref_trigger_2.clone();
+
+        dialog.show_all();
+    }));
 }
 
 fn setup_menus(

@@ -36,27 +36,43 @@ pub(crate) fn setup_canvas_events(
     canvas.connect_button_press_event(clone!(@strong state, @strong window as w, @strong canvas as c => move |_, event| {
         let button = event.button();
 
-        
-        if button == 2 || button == 3 {
+        let btn_trigger = EventTrigger::Mouse(button);
+        let target_tool = {
             let st = state.borrow();
-            
-            let preferred_tool = if button == 2 { &st.pref_button_2_tool } else { &st.pref_button_3_tool };
-            
-            if let Some(tool) = preferred_tool {
-                let tool_to_set = tool.clone();
-                drop(st); 
-                state.borrow_mut().active_tool = tool_to_set;
-                
-                c.queue_draw(); 
-                return Propagation::Stop; 
+            if Some(&btn_trigger) == st.pref_trigger_1.as_ref() { st.pref_tool_1.clone() }
+            else if Some(&btn_trigger) == st.pref_trigger_2.as_ref() { st.pref_tool_2.clone() }
+            else { None }
+        };
+
+        if let Some(tool) = target_tool {
+            // Incapsuliamo la lettura per far morire il borrow subito!
+            let (needs_switch, current, cb) = {
+                let st = state.borrow();
+                if st.active_temp_trigger.is_none() && st.active_tool != tool {
+                    (true, st.active_tool.clone(), st.update_toolbar_ui.clone())
+                } else {
+                    (false, st.active_tool.clone(), None)
+                }
+            };
+
+            if needs_switch {
+                let mut st_mut = state.borrow_mut();
+                st_mut.previous_tool = Some(current);
+                st_mut.active_tool = tool.clone();
+                st_mut.active_temp_trigger = Some(btn_trigger);
+                drop(st_mut);
+
+                if let Some(f) = cb { f(&tool); }
+                c.queue_draw();
+            }
+            if button != 1 {
+                return Propagation::Stop;
             }
         }
 
-        
         if button != 1 { return Propagation::Proceed; }
 
         let (mx, my) = event.position();
-        
         
         let (ox, oy) = state.borrow().page_origin;
         let zoom = state.borrow().zoom;
@@ -351,135 +367,169 @@ pub(crate) fn setup_canvas_events(
         let c = canvas.clone();
         let w = window.clone();
         canvas.connect_button_release_event(move |_, event| {
-        if event.button() != 1 { return Propagation::Proceed; }
+            let button = event.button();
+            
+            let btn_trigger = EventTrigger::Mouse(button);
+            
+            // Verifichiamo la condizione bloccandola in uno scope ristretto
+            let should_restore = {
+                let st = s.borrow();
+                st.active_temp_trigger.as_ref() == Some(&btn_trigger)
+            };
+            
+            if should_restore {
+                let (prev_tool, cb) = {
+                    let st = s.borrow();
+                    (st.previous_tool.clone(), st.update_toolbar_ui.clone())
+                };
+                
+                let mut st_mut = s.borrow_mut();
+                if let Some(p) = &prev_tool {
+                    st_mut.active_tool = p.clone();
+                }
+                st_mut.previous_tool = None;
+                st_mut.active_temp_trigger = None;
+                drop(st_mut);
+                
+                if let Some(p) = prev_tool {
+                    if let Some(f) = cb { f(&p); }
+                }
+                c.queue_draw();
+                
+                if button != 1 {
+                    return Propagation::Stop;
+                }
+            }
+            
+            if button != 1 { return Propagation::Proceed; }
 
-        let tool = s.borrow().active_tool.clone();
+            let tool = s.borrow().active_tool.clone();
 
-        if tool == Tool::Select {
-            let drag_mode = s.borrow().drag_mode.clone();
-            match drag_mode {
-                DragMode::Move { orig_positions, .. } => {
-                    let mut st = s.borrow_mut();
-                    let mut out_of_bounds = false;
+            if tool == Tool::Select {
+                let drag_mode = s.borrow().drag_mode.clone();
+                match drag_mode {
+                    DragMode::Move { orig_positions, .. } => {
+                        let mut st = s.borrow_mut();
+                        let mut out_of_bounds = false;
 
-                    
-                    for &idx in &st.selected_indices {
-                        if let Some(payload) = st.current_page_data.components.get(idx) {
-                            if let Some((bx, by, bw, bh)) = component_bbox(payload) {
-                                if bx < 0.0 || by < 0.0 || bx + bw > PAGE_W || by + bh > PAGE_H {
-                                    out_of_bounds = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if out_of_bounds {
                         
-                        for &(idx, orig_x, orig_y) in &orig_positions {
-                            if let Some(comp) = st.current_page_data.components.get_mut(idx) {
-                                match comp {
-                                    ComponentPayload::Shape(b) => {
-                                        let shift_x = orig_x - b.x1;
-                                        let shift_y = orig_y - b.y1;
-                                        b.x1 += shift_x; b.x2 += shift_x;
-                                        b.y1 += shift_y; b.y2 += shift_y;
+                        for &idx in &st.selected_indices {
+                            if let Some(payload) = st.current_page_data.components.get(idx) {
+                                if let Some((bx, by, bw, bh)) = component_bbox(payload) {
+                                    if bx < 0.0 || by < 0.0 || bx + bw > PAGE_W || by + bh > PAGE_H {
+                                        out_of_bounds = true;
+                                        break;
                                     }
-                                    ComponentPayload::PenStroke(stroke) | ComponentPayload::EraserStroke(stroke) => {
-                                        let first = stroke.points.first().copied().unwrap_or((0.0, 0.0));
-                                        let shift_x = orig_x - first.0;
-                                        let shift_y = orig_y - first.1;
-                                        for pt in stroke.points.iter_mut() { pt.0 += shift_x; pt.1 += shift_y; }
-                                    }
-                                    ComponentPayload::RichText(b) => { b.x = orig_x; b.y = orig_y; }
-                                    ComponentPayload::Image(b) => { b.x = orig_x; b.y = orig_y; }
                                 }
                             }
                         }
+
+                        if out_of_bounds {
+                            
+                            for &(idx, orig_x, orig_y) in &orig_positions {
+                                if let Some(comp) = st.current_page_data.components.get_mut(idx) {
+                                    match comp {
+                                        ComponentPayload::Shape(b) => {
+                                            let shift_x = orig_x - b.x1;
+                                            let shift_y = orig_y - b.y1;
+                                            b.x1 += shift_x; b.x2 += shift_x;
+                                            b.y1 += shift_y; b.y2 += shift_y;
+                                        }
+                                        ComponentPayload::PenStroke(stroke) | ComponentPayload::EraserStroke(stroke) => {
+                                            let first = stroke.points.first().copied().unwrap_or((0.0, 0.0));
+                                            let shift_x = orig_x - first.0;
+                                            let shift_y = orig_y - first.1;
+                                            for pt in stroke.points.iter_mut() { pt.0 += shift_x; pt.1 += shift_y; }
+                                        }
+                                        ComponentPayload::RichText(b) => { b.x = orig_x; b.y = orig_y; }
+                                        ComponentPayload::Image(b) => { b.x = orig_x; b.y = orig_y; }
+                                    }
+                                }
+                            }
+                            st.drag_mode = DragMode::None;
+                            drop(st);
+                            c.queue_draw();
+
+                            
+                            let alert = gtk::MessageDialog::new(
+                                Some(&w), gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::Ok,
+                                "Non puoi spostare elementi fuori dai bordi della pagina!",
+                            );
+                            alert.run();
+                            unsafe { alert.destroy(); }
+                            return Propagation::Proceed;
+                        }
+
+                        
+                        if let Some(conn) = &st.db {
+                            let blob = encode_payload_list(&st.current_page_data.components);
+                            
+                            
+                            let _ = conn.execute(
+                                "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
+                                rusqlite::params![st.current_page_id]
+                            );
+                            
+                            let _ = conn.execute(
+                                "DELETE FROM active_components WHERE page_id = ?1",
+                                rusqlite::params![st.current_page_id]
+                            );
+                            
+                            let _ = conn.execute(
+                                "UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2",
+                                rusqlite::params![blob, st.current_page_id]
+                            );
+                        }
+
+                        st.is_modified = true;
+                        
+                        st.undo_stack.clear();
+                        st.redo_stack.clear();
+
+                        let title = st.window_title();
                         st.drag_mode = DragMode::None;
                         drop(st);
+                        w.set_title(&title);
                         c.queue_draw();
-
-                        
-                        let alert = gtk::MessageDialog::new(
-                            Some(&w), gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::Ok,
-                            "Non puoi spostare elementi fuori dai bordi della pagina!",
-                        );
-                        alert.run();
-                        unsafe { alert.destroy(); }
-                        return Propagation::Proceed;
                     }
+                    DragMode::Resize { .. } => {
+                        let mut st = s.borrow_mut();
+                        
+                        
+                        if let Some(conn) = &st.db {
+                            let blob = encode_payload_list(&st.current_page_data.components);
+                            
+                            let _ = conn.execute(
+                                "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
+                                rusqlite::params![st.current_page_id]
+                            );
+                            let _ = conn.execute(
+                                "DELETE FROM active_components WHERE page_id = ?1",
+                                rusqlite::params![st.current_page_id]
+                            );
+                            let _ = conn.execute(
+                                "UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2",
+                                rusqlite::params![blob, st.current_page_id]
+                            );
+                        }
+                        
+                        st.is_modified = true;
+                        st.undo_stack.clear();
+                        st.redo_stack.clear();
 
-                    
-                    if let Some(conn) = &st.db {
-                        let blob = encode_payload_list(&st.current_page_data.components);
-                        
-                        
-                        let _ = conn.execute(
-                            "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
-                            rusqlite::params![st.current_page_id]
-                        );
-                        
-                        let _ = conn.execute(
-                            "DELETE FROM active_components WHERE page_id = ?1",
-                            rusqlite::params![st.current_page_id]
-                        );
-                        
-                        let _ = conn.execute(
-                            "UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2",
-                            rusqlite::params![blob, st.current_page_id]
-                        );
+                        let title = st.window_title();
+                        st.drag_mode = DragMode::None;
+                        drop(st);
+                        w.set_title(&title);
+                        c.queue_draw();
                     }
-
-                    st.is_modified = true;
-                    
-                    st.undo_stack.clear();
-                    st.redo_stack.clear();
-
-                    let title = st.window_title();
-                    st.drag_mode = DragMode::None;
-                    drop(st);
-                    w.set_title(&title);
-                    c.queue_draw();
-                }
-                DragMode::Resize { .. } => {
-                    let mut st = s.borrow_mut();
-                    
-                    
-                    if let Some(conn) = &st.db {
-                        let blob = encode_payload_list(&st.current_page_data.components);
-                        
-                        let _ = conn.execute(
-                            "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
-                            rusqlite::params![st.current_page_id]
-                        );
-                        let _ = conn.execute(
-                            "DELETE FROM active_components WHERE page_id = ?1",
-                            rusqlite::params![st.current_page_id]
-                        );
-                        let _ = conn.execute(
-                            "UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2",
-                            rusqlite::params![blob, st.current_page_id]
-                        );
+                    DragMode::Marquee { .. } => {
+                        s.borrow_mut().drag_mode = DragMode::None;
+                        c.queue_draw();
                     }
-                    
-                    st.is_modified = true;
-                    st.undo_stack.clear();
-                    st.redo_stack.clear();
-
-                    let title = st.window_title();
-                    st.drag_mode = DragMode::None;
-                    drop(st);
-                    w.set_title(&title);
-                    c.queue_draw();
+                    DragMode::None => {}
                 }
-                DragMode::Marquee { .. } => {
-                    s.borrow_mut().drag_mode = DragMode::None;
-                    c.queue_draw();
-                }
-                DragMode::None => {}
-            }
-            return Propagation::Proceed;
+                return Propagation::Proceed;
         }
 
         
