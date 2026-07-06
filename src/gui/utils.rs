@@ -70,8 +70,8 @@ pub fn load_icon(filename: &str) -> gtk::Image {
     }
 }
 
-pub fn make_color_button(color: &Color, label: &str) -> gtk::Button {
-    let btn = gtk::Button::new();
+pub fn make_color_button(color: &Color, label: &str) -> gtk::ToggleButton {
+    let btn = gtk::ToggleButton::new();
     btn.set_tooltip_text(Some(label));
     btn.set_size_request(28, 28);
     let area = gtk::DrawingArea::new();
@@ -85,7 +85,7 @@ pub fn make_color_button(color: &Color, label: &str) -> gtk::Button {
         cr.set_line_width(1.0);
         cr.rectangle(0.5, 0.5, 19.0, 19.0);
         let _ = cr.stroke();
-        Propagation::Proceed
+        glib::Propagation::Proceed
     });
     btn.add(&area);
     btn

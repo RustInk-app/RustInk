@@ -34,14 +34,9 @@
 	box-shadow: inset 0px 0px 2px gray;
 }
 
-/*
-	Use :checked for a selected ToggleButton.
-	See https://stackoverflow.com/questions/39824345/use-css-to-style-gtktogglebutton-depending-on-the-state
-*/
 #floatingToolbox button:checked {
-	/*background-color: lightblue;*/
-	border-color: lightblue;
-	box-shadow: inset 0px 0px 3px lightblue;
+	border-color: #0078d7;
+	box-shadow: inset 0px 0px 3px #0078d7;
 
 	transition: background-color 0.5s ease, border-color 0.5s ease, margin 0.3s ease;
 }
@@ -65,8 +60,8 @@ window.darkMode #pdfFloatingToolGrid button {
 
 window.darkMode #floatingToolbox button:checked {
 	background: rgba(85, 85, 95, 0.1);
-	border-color: lightblue;
-	box-shadow: 0px 0px 3px lightblue;
+	border-color: #0078d7;
+	box-shadow: 0px 0px 3px #0078d7;
 }
 
 window.darkMode #floatingToolbox > box,

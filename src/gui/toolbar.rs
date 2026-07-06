@@ -182,35 +182,177 @@ pub(crate) fn setup_toolbar(
         (Color::new(0.95, 0.6, 0.05), "Arancione"),
         (Color::new(0.55, 0.15, 0.75), "Viola"),
     ];
+
+    let mut color_toggles = Vec::new();
     for (color, label) in &preset_colors {
         let btn = make_color_button(color, label);
         btn.set_relief(gtk::ReliefStyle::None);
+        color_toggles.push((color.clone(), btn));
+    }
+
+    for (c, btn) in &color_toggles {
         let s = state.clone();
-        let c = color.clone();
-        btn.connect_clicked(move |_| {
-            s.borrow_mut().current_color = c.clone();
+        let c_clone = c.clone();
+        let all_toggles = color_toggles.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>();
+        let c_canvas = canvas.clone();
+        
+        btn.connect_toggled(move |b| {
+            if b.is_active() {
+                let mut changed = false;
+                let mut switch_to_pen = false;
+
+                // 1. Modifichiamo lo stato e SALVIAMO IL COLORE come prima cosa!
+                // Manteniamo il borrow_mut isolato nelle parentesi graffe.
+                {
+                    let mut st = s.borrow_mut();
+                    if st.current_color == c_clone { return; } // Esci se è già questo il colore
+                    st.current_color = c_clone.clone();
+
+                    let indices = st.selected_indices.clone();
+                    for idx in indices {
+                        if let Some(comp) = st.current_page_data.components.get_mut(idx) {
+                            match comp {
+                                ComponentPayload::PenStroke(stroke) => { stroke.color = c_clone.clone(); changed = true; }
+                                ComponentPayload::Shape(shape) => { shape.color = c_clone.clone(); changed = true; }
+                                ComponentPayload::RichText(block) => { 
+                                    for span in &mut block.spans { span.style.color = c_clone.clone(); }
+                                    changed = true; 
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    if changed {
+                        if let Some(conn) = &st.db {
+                            let blob = crate::save_handler::db::encode_payload_list(&st.current_page_data.components);
+                            let _ = conn.execute("DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)", rusqlite::params![st.current_page_id]);
+                            let _ = conn.execute("DELETE FROM active_components WHERE page_id = ?1", rusqlite::params![st.current_page_id]);
+                            let _ = conn.execute("UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2", rusqlite::params![blob, st.current_page_id]);
+                        }
+                        st.is_modified = true;
+                        st.undo_stack.clear();
+                        st.redo_stack.clear();
+                    }
+
+                    // Prepara il cambio a Penna se usavamo la gomma
+                    if st.active_tool == Tool::Eraser {
+                        st.active_tool = Tool::Pen;
+                        switch_to_pen = true;
+                    }
+                } // IL BORROW MUTABILE SI CHIUDE QUI
+
+                // 2. SOLO ORA disattiviamo gli altri bottoni.
+                // Avendo già aggiornato lo stato sopra, i loro gestori "sapranno" di doversi spegnere senza fare storie.
+                for other in &all_toggles {
+                    if other != b {
+                        other.set_active(false);
+                    }
+                }
+
+                if changed {
+                    c_canvas.queue_draw();
+                }
+
+                // 3. Estraiamo la callback clonandola PRIMA di chiamarla, in modo
+                // da non tenere aperto s.borrow() durante il trigger di segnali GTK!
+                if switch_to_pen {
+                    let cb = s.borrow().update_toolbar_ui.clone();
+                    if let Some(f) = cb {
+                        f(&Tool::Pen);
+                    }
+                }
+            } else {
+                // Se l'utente clicca sul colore che è già attivo provando a spegnerlo, lo riaccendiamo forzatamente
+                if s.borrow().current_color == c_clone {
+                    b.set_active(true);
+                }
+            }
         });
-        add_item!(&btn);
+        add_item!(btn);
+    }
+    
+    // Attiviamo il primo bottone (Nero) all'avvio
+    if let Some((_, first_btn)) = color_toggles.first() {
+        first_btn.set_active(true);
     }
 
     let btn_custom_color = gtk::Button::with_label("🎨");
     {
         let s = state.clone();
         let w = window.clone();
+        let c_canvas = canvas.clone();
+        let all_toggles = color_toggles.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>();
+        
         btn_custom_color.connect_clicked(move |_| {
             let dialog = gtk::ColorChooserDialog::new(Some("Scegli un colore"), Some(&w));
             if dialog.run() == gtk::ResponseType::Ok {
                 let rgba = dialog.rgba();
-                s.borrow_mut().current_color = Color::new(rgba.red(), rgba.green(), rgba.blue());
+                let new_c = Color::new(rgba.red(), rgba.green(), rgba.blue());
+                
+                let mut changed = false;
+                let mut switch_to_pen = false;
+
+                // Stessa logica isolata per il colore personalizzato
+                {
+                    let mut st = s.borrow_mut();
+                    st.current_color = new_c.clone();
+
+                    let indices = st.selected_indices.clone();
+                    for idx in indices {
+                        if let Some(comp) = st.current_page_data.components.get_mut(idx) {
+                            match comp {
+                                ComponentPayload::PenStroke(stroke) => { stroke.color = new_c.clone(); changed = true; }
+                                ComponentPayload::Shape(shape) => { shape.color = new_c.clone(); changed = true; }
+                                ComponentPayload::RichText(block) => { 
+                                    for span in &mut block.spans { span.style.color = new_c.clone(); }
+                                    changed = true; 
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    if changed {
+                        if let Some(conn) = &st.db {
+                            let blob = crate::save_handler::db::encode_payload_list(&st.current_page_data.components);
+                            let _ = conn.execute("DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)", rusqlite::params![st.current_page_id]);
+                            let _ = conn.execute("DELETE FROM active_components WHERE page_id = ?1", rusqlite::params![st.current_page_id]);
+                            let _ = conn.execute("UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2", rusqlite::params![blob, st.current_page_id]);
+                        }
+                        st.is_modified = true;
+                        st.undo_stack.clear();
+                        st.redo_stack.clear();
+                    }
+
+                    if st.active_tool == Tool::Eraser {
+                        st.active_tool = Tool::Pen;
+                        switch_to_pen = true;
+                    }
+                } // Fine del borrow_mut
+
+                // Deselezioniamo visivamente tutti i preset (sicuro da fare qui)
+                for other in &all_toggles {
+                    other.set_active(false);
+                }
+
+                if changed {
+                    c_canvas.queue_draw();
+                }
+
+                if switch_to_pen {
+                    let cb = s.borrow().update_toolbar_ui.clone();
+                    if let Some(f) = cb {
+                        f(&Tool::Pen);
+                    }
+                }
             }
-            unsafe {
-                dialog.destroy();
-            }
+            unsafe { dialog.destroy(); }
         });
     }
     add_item!(&btn_custom_color);
     add_sep!();
-
+    
     let btn_thin = make_toggle("thickness-fine.svg", "Sottile");
     let btn_med = make_toggle("thickness-medium.svg", "Medio");
     let btn_thick = make_toggle("thickness-thick.svg", "Grande");
