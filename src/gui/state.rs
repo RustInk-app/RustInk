@@ -81,11 +81,8 @@ pub struct AppState {
     pub thumb_req_stack: std::sync::Arc<std::sync::Mutex<Vec<(std::path::PathBuf, usize, u64)>>>,
     pub thumb_wakeup_tx: Option<std::sync::mpsc::Sender<()>>,
 
-    /// Incrementato ogni volta che un documento (nuovo o aperto) viene caricato.
-    /// Serve a far capire al worker delle miniature che deve riaprire la connessione
-    /// al database, anche se il PATH del file su disco è rimasto lo stesso
-    /// (il file della sessione ha sempre lo stesso nome fisso: struttura.sqlite).
     pub doc_generation: u64,
+    pub clipboard: Vec<crate::models::page::ComponentPayload>,
 }
 
 #[derive(Default, Debug)]
@@ -170,6 +167,8 @@ impl AppState {
             thumb_req_stack: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             thumb_wakeup_tx: None,
             doc_generation: 0,
+
+            clipboard: Vec::new(),
         }
     }
 

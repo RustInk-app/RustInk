@@ -177,7 +177,7 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
                             let sy = PAGE_H / src_h;
                             let scale = (sx + sy) / 2.0;
 
-                            let mut text_font: String = "Sans".to_string();
+                            let text_font: String = "Sans".to_string();
 
                             let font_size_scaled = text_size * scale;
 

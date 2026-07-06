@@ -1,5 +1,4 @@
 use crate::models::page::*;
-use crate::models::stroke::*;
 
 use crate::translate_xournal::*;
 
@@ -298,6 +297,12 @@ pub(crate) fn setup_file_ops(
     let menu_new: gtk::MenuItem = builder.object("file_new").unwrap();
     let menu_open: gtk::MenuItem = builder.object("file_open").unwrap();
     let menu_save: gtk::MenuItem = builder.object("file_save").unwrap();
+
+    let accel_group = gtk::AccelGroup::new();
+    window.add_accel_group(&accel_group);
+    let (key, modifier) = gtk::accelerator_parse("<Primary>s"); // <Primary> si adatta in automatico a Ctrl su Windows/Linux e Cmd su Mac
+    menu_save.add_accelerator("activate", &accel_group, key, modifier, gtk::AccelFlags::VISIBLE);
+
     let menu_save_as: gtk::MenuItem = builder.object("file_save_as").unwrap();
 
     let execute_save_background = clone!(@strong state, @strong window => move |target_path: PathBuf| {
@@ -477,15 +482,36 @@ pub(crate) fn setup_file_ops(
     let do_open = clone!(@strong state, @strong window, @strong canvas, @strong spin_page, @strong lbl_tot, @strong page_listbox, @strong prompt_save_if_modified => move || {
         if !prompt_save_if_modified() { return; }
 
-        let open_dialog = gtk::FileChooserDialog::new(Some("Apri documento"), Some(&window), gtk::FileChooserAction::Open);
-        open_dialog.add_button("Annulla", gtk::ResponseType::Cancel); open_dialog.add_button("Apri", gtk::ResponseType::Accept);
-        let f1 = gtk::FileFilter::new(); f1.set_name(Some("RASTIN (*.rastin)")); f1.add_pattern("*.rastin"); open_dialog.add_filter(f1);
-        let f2 = gtk::FileFilter::new(); f2.set_name(Some("Xournal++ (*.xopp)")); f2.add_pattern("*.xopp"); open_dialog.add_filter(f2);
-        let f3 = gtk::FileFilter::new(); f3.set_name(Some("Tutti i supportati")); f3.add_pattern("*.rastin"); f3.add_pattern("*.xopp"); open_dialog.add_filter(f3);
+        
+        // Utilizza il dialog NATIVO del sistema operativo
+        let open_dialog = gtk::FileChooserNative::new(
+            Some("Apri documento"),
+            Some(&window),
+            gtk::FileChooserAction::Open,
+            Some("Apri"),
+            Some("Annulla"),
+        );
+
+        let f1 = gtk::FileFilter::new(); 
+        f1.set_name(Some("RASTIN (*.rastin)")); 
+        f1.add_pattern("*.rastin"); 
+        open_dialog.add_filter(f1);
+
+        let f2 = gtk::FileFilter::new(); 
+        f2.set_name(Some("Xournal++ (*.xopp)")); 
+        f2.add_pattern("*.xopp"); 
+        open_dialog.add_filter(f2);
+
+        let f3 = gtk::FileFilter::new(); 
+        f3.set_name(Some("Tutti i supportati")); 
+        f3.add_pattern("*.rastin"); 
+        f3.add_pattern("*.xopp"); 
+        open_dialog.add_filter(f3);
 
         let accepted = open_dialog.run() == gtk::ResponseType::Accept;
         let chosen   = open_dialog.filename();
         unsafe { open_dialog.destroy(); }
+
         if !accepted { return; }
         let chosen = match chosen { Some(p) => p, None => return };
 

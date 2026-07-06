@@ -14,6 +14,9 @@ use crate::gui::state::*;
 use crate::models::image::*;
 use crate::save_handler::autosave::*;
 
+use gdk::keys::constants as keys;
+use crate::models::page::{PAGE_W, PAGE_H};
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) fn setup_keyboard_shortcuts(
@@ -64,10 +67,7 @@ pub(crate) fn setup_keyboard_shortcuts(
             }
             return Propagation::Stop;
         }
-        // --- FINE HOLD-TO-SWITCH ---
-
-        // --- INIZIO SCORCIATOIE CLASSICHE ---
-        if ctrl && key == Key::z {
+        if ctrl && (key == Key::z || key == Key::Z) {
             state.borrow_mut().undo();
             let title = state.borrow().window_title();
             window.set_title(&title);
@@ -83,84 +83,126 @@ pub(crate) fn setup_keyboard_shortcuts(
             return Propagation::Stop;
         }
         
-        if ctrl && (key == Key::v || key == Key::V) {
-            let clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
-
-            if !clipboard.wait_is_image_available() {
-                return Propagation::Stop;
+        if ctrl && (key == keys::c || key == keys::C) 
+        {
+            // --- CTRL + C : COPIA ---
+            let st = state.borrow();
+            // Diamo il tipo esplicito a Rust per evitare errori di compilazione
+            let mut copied: Vec<crate::models::page::ComponentPayload> = Vec::new();
+            
+            // Copia gli elementi dalla selezione multipla
+            for &idx in &st.selected_indices {
+                if let Some(comp) = st.current_page_data.components.get(idx) {
+                    copied.push(comp.clone());
+                }
             }
-
-            if let Some(pixbuf) = clipboard.wait_for_image() {
-                let raw_bytes = match pixbuf_to_raw_bytes(&pixbuf) {
-                    Some(b) => b,
-                    None    => {
-                        show_format_error_dialog(&window);
-                        return Propagation::Stop;
+            
+            // Per sicurezza: se usi un clic singolo senza selezioni multiple
+            if let Some(idx) = st.selected_index {
+                if !st.selected_indices.contains(&idx) {
+                    if let Some(comp) = st.current_page_data.components.get(idx) {
+                        copied.push(comp.clone());
                     }
-                };
-                
-                let fmt = detect_image_format(&raw_bytes);
-                if fmt.is_none() {
-                    show_format_error_dialog(&window);
-                    return Propagation::Stop;
                 }
-                
-                let media_tmp = media_dir();
-                let _ = std::fs::create_dir_all(&media_tmp);
-
-                let ts = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_millis())
-                    .unwrap_or(0);
-                let webp_filename = format!("img_{ts}.webp");
-                let webp_path     = media_tmp.join(&webp_filename);
-                let bundle_entry  = format!("media/{webp_filename}");
-                
-                let img = match image::load_from_memory(&raw_bytes) {
-                    Ok(i)  => i,
-                    Err(_) => {
-                        show_format_error_dialog(&window);
-                        return Propagation::Stop;
-                    }
-                };
-
-                let iw_orig = img.width()  as f64;
-                let ih_orig = img.height() as f64;
-                
-                if let Err(e) = img.save_with_format(&webp_path, image::ImageFormat::WebP) {
-                    eprintln!("[PASTE] Errore salvataggio WebP: {e}");
-                    return Propagation::Stop;
-                }
-                
-                let max_w = PAGE_W * 0.90;
-                let max_h = PAGE_H * 0.90;
-                let scale = (max_w / iw_orig).min(max_h / ih_orig).min(1.0);
-                let iw = iw_orig * scale;
-                let ih = ih_orig * scale;
-                
-                let x = (PAGE_W / 2.0 - iw / 2.0).max(0.0);
-                let y = (PAGE_H / 2.0 - ih / 2.0).max(0.0);
-
-                let block = ImageBlock {
-                    filename: bundle_entry,
-                    x,
-                    y,
-                    width:  iw,
-                    height: ih,
-                };
-
-                {
-                    let mut st = state.borrow_mut();
-                    st.commit_component(ComponentPayload::Image(block));
-                    let title = st.window_title();
-                    drop(st);
-                    window.set_title(&title);
-                }
-                canvas.queue_draw();
             }
+            
+            drop(st);
+            state.borrow_mut().clipboard = copied;
             return Propagation::Stop;
         }
-        
+            
+        if ctrl && (key == keys::v || key == keys::V) {
+            // --- CTRL + V : INCOLLA ---
+            let mut st = state.borrow_mut();
+            if st.clipboard.is_empty() {
+                return Propagation::Proceed;
+            }
+
+            // 1. Calcola l'ingombro massimo e minimo degli elementi nella clipboard
+            let mut min_x = f64::MAX;
+            let mut min_y = f64::MAX;
+            let mut max_x = f64::MIN;
+            let mut max_y = f64::MIN;
+
+            for comp in &st.clipboard {
+                let (cx1, cx2, cy1, cy2) = crate::save_handler::db::bounding_box(comp);
+                if cx1 < min_x { min_x = cx1; }
+                if cy1 < min_y { min_y = cy1; }
+                if cx2 > max_x { max_x = cx2; }
+                if cy2 > max_y { max_y = cy2; }
+            }
+
+            // 2. Calcola l'offset standard (es. 20px in basso a destra dall'originale)
+            let mut offset_x = 20.0;
+            let mut offset_y = 20.0;
+
+            // 3. Sistema Anti-Uscita dai Bordi (Clamping su PAGE_W e PAGE_H)
+            if max_x + offset_x > crate::models::page::PAGE_W { offset_x = crate::models::page::PAGE_W - max_x; }
+            if max_y + offset_y > crate::models::page::PAGE_H { offset_y = crate::models::page::PAGE_H - max_y; }
+            if min_x + offset_x < 0.0 { offset_x = -min_x; }
+            if min_y + offset_y < 0.0 { offset_y = -min_y; }
+
+            if offset_x < 0.0 && max_x >= crate::models::page::PAGE_W { offset_x = 0.0; }
+            if offset_y < 0.0 && max_y >= crate::models::page::PAGE_H { offset_y = 0.0; }
+
+            // 4. Trasla gli elementi e prepara l'incollatura
+            let mut new_elements: Vec<crate::models::page::ComponentPayload> = Vec::new();
+            
+            for comp in &mut st.clipboard {
+                match comp {
+                    crate::models::page::ComponentPayload::PenStroke(s) |
+                    crate::models::page::ComponentPayload::EraserStroke(s) => {
+                        for pt in &mut s.points {
+                            pt.0 += offset_x;
+                            pt.1 += offset_y;
+                        }
+                    }
+                    crate::models::page::ComponentPayload::RichText(b) => {
+                        b.x += offset_x;
+                        b.y += offset_y;
+                    }
+                    crate::models::page::ComponentPayload::Image(b) => {
+                        b.x += offset_x;
+                        b.y += offset_y;
+                    }
+                    crate::models::page::ComponentPayload::Shape(s) => {
+                        s.x1 += offset_x;
+                        s.x2 += offset_x;
+                        s.y1 += offset_y;
+                        s.y2 += offset_y;
+                    }
+                }
+                new_elements.push(comp.clone());
+            }
+
+            // 5. Inserimento VERO nel Database e nello stack
+            // Usiamo commit_component che aggiunge il payload a components, lo inserisce
+            // nel DB sqlite, e pusha il suo nuovo row_id dentro undo_stack!
+            let start_idx = st.current_page_data.components.len();
+            
+            for comp in new_elements {
+                st.commit_component(comp);
+            }
+            
+            let end_idx = st.current_page_data.components.len();
+            
+            // 6. Aggiorna la selezione in modo che l'utente possa subito muovere gli elementi incollati
+            st.selected_indices = (start_idx..end_idx).collect();
+            if end_idx - start_idx == 1 {
+                st.selected_index = Some(start_idx);
+            } else {
+                st.selected_index = None;
+            }
+
+            // Rimuove il "focus" su una singola selezione vecchia, forzando la visuale sui nuovi
+            st.drag_mode = crate::models::select::DragMode::None;
+
+            drop(st);
+            canvas.queue_draw();
+
+            return Propagation::Stop;
+        }
+
         if key == Key::Delete || key == Key::BackSpace {
             let has_selection = !state.borrow().selected_indices.is_empty();
             if has_selection {
