@@ -1,9 +1,5 @@
-use crate::image;
-
 use crate::gui::drawing::*;
-
 use crate::models::page::*;
-
 use gtk::cairo;
 
 #[derive(Clone, Debug, PartialEq)]

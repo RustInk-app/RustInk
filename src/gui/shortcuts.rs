@@ -14,9 +14,6 @@ use crate::gui::state::*;
 use crate::models::image::*;
 use crate::save_handler::autosave::*;
 
-// Aggiungiamo l'import per le funzioni di utilità dell'immagine
-use crate::gui::utils::*;
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) fn setup_keyboard_shortcuts(

@@ -43,6 +43,7 @@ pub fn build_ui(app: &gtk::Application) {
 
             match recovered {
                 Ok(conn) => {
+                    let _ = crate::save_handler::db::ensure_pdf_schema(&conn); 
                     let count = page_count(&conn).unwrap_or(1);
                     let first_id = page_id_at(&conn, 0).unwrap_or(1);
                     let first_page = load_page(&conn, first_id).unwrap_or_default();
@@ -366,4 +367,5 @@ fn setup_menus(
     file_quit.connect_activate(move |_| {
         w_clone.close();
     });
+    
 }

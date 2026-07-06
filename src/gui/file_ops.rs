@@ -6,12 +6,8 @@ use crate::translate_xournal::*;
 use crate::save_handler::autosave;
 use crate::save_handler::db::*;
 
-use crate::gui::canvas_events::*;
-use crate::gui::drawing::*;
-use crate::gui::shortcuts::*;
 use crate::gui::sidebar::*;
 use crate::gui::state::*;
-use crate::gui::toolbar::*;
 use crate::gui::utils::*;
 
 use glib::Propagation;
@@ -21,6 +17,272 @@ use gtk::prelude::*;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+
+use crate::save_handler::autosave::docs_dir;
+use std::path::Path;
+
+pub fn import_pdf_background(
+    source_path: &Path,
+    db_tmp_path: &Path, 
+    start_order: i64,
+) -> Result<(i64, usize, Option<(i64, usize)>, String), String> {
+    
+    // 1. Validazione iniziale del PDF (legge solo l'header per contare le pagine)
+    let uri = gio::File::for_path(source_path).uri();
+    let doc = poppler::Document::from_file(&uri, None)
+        .map_err(|e| format!("PDF non valido o corrotto: {e}"))?;
+    let n_pages = doc.n_pages();
+    if n_pages <= 0 {
+        return Err("Il PDF non contiene pagine".into());
+    }
+
+    // 2. Creazione della cartella della sessione e copia del file in background
+    std::fs::create_dir_all(docs_dir()).map_err(|e| e.to_string())?;
+    let uuid = uuid::Uuid::new_v4();
+    let dest_filename = format!("{uuid}.pdf");
+    let dest_path = docs_dir().join(&dest_filename);
+    
+    // La copia fisica (operazione lenta su disco) avviene qui senza bloccare la UI
+    std::fs::copy(source_path, &dest_path).map_err(|e| e.to_string())?;
+
+    let original_name = source_path
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "documento.pdf".into());
+    let relative_path = format!("docs/{dest_filename}");
+
+    // 3. Scrittura ottimizzata all'interno del Database
+    let mut conn = rusqlite::Connection::open(db_tmp_path).map_err(|e| e.to_string())?;
+    crate::save_handler::db::ensure_pdf_schema(&conn).map_err(|e| e.to_string())?;
+
+    let doc_id = crate::save_handler::db::insert_pdf_document(&conn, &relative_path, &original_name, n_pages as i64)
+        .map_err(|e| e.to_string())?;
+
+    // Inserimento bulk istantaneo tramite transazione
+    let first_id = crate::save_handler::db::insert_pdf_backed_pages_bulk(
+        &mut conn,
+        start_order,
+        doc_id,
+        n_pages as usize
+    ).map_err(|e| e.to_string())?;
+
+    let first_new_id = Some((first_id, start_order as usize));
+
+    // Restituiamo anche dest_filename alla UI
+    Ok((doc_id, n_pages as usize, first_new_id, dest_filename))
+}
+
+
+pub fn on_import_pdf_clicked(
+    window: &gtk::Window,
+    state: &Rc<RefCell<AppState>>,
+    canvas: &gtk::DrawingArea,
+    spin_page: &gtk::SpinButton,
+    lbl_tot: &gtk::Label,
+    page_listbox: &gtk::ListBox,
+) {
+    let dialog = gtk::FileChooserDialog::new(
+        Some("Importa PDF"),
+        Some(window),
+        gtk::FileChooserAction::Open,
+    );
+    dialog.add_buttons(&[
+        ("Annulla", gtk::ResponseType::Cancel),
+        ("Importa", gtk::ResponseType::Accept),
+    ]);
+
+    let filter = gtk::FileFilter::new();
+    filter.add_pattern("*.pdf");
+    filter.set_name(Some("Documenti PDF"));
+    dialog.add_filter(filter);
+
+    if dialog.run() == gtk::ResponseType::Accept {
+        if let Some(path) = dialog.filename() {
+            unsafe { dialog.destroy(); } 
+            
+            let st = state.borrow();
+            let db_tmp_path = match st.db_tmp_path.clone() {
+                Some(p) => p,
+                None => return, 
+            };
+            let start_order = st.page_count as i64;
+            drop(st);
+
+            // Mostriamo il dialog di caricamento per non congelare lo schermo
+            let loading = crate::gui::utils::show_loading_dialog(window, "Importazione PDF in corso...");
+            
+            let (tx, rx) = std::sync::mpsc::channel();
+            let path_clone = path.clone();
+
+            // Lancio del thread in background
+            std::thread::spawn(move || {
+                let res = import_pdf_background(&path_clone, &db_tmp_path, start_order);
+                let _ = tx.send(res);
+            });
+
+            let s_clone = state.clone();
+            let c_clone = canvas.clone();
+            let sp_clone = spin_page.clone();
+            let lt_clone = lbl_tot.clone();
+            let lb_clone = page_listbox.clone();
+            let w_clone = window.clone();
+            let loading_weak = loading.downgrade();
+
+            // Questo blocco viene eseguito ciclicamente sul Main Thread finché non riceve i dati
+            glib::idle_add_local(move || {
+                match rx.try_recv() {
+                    Ok(Ok((doc_id, n_pages, first_new_id, dest_filename))) => {
+                        if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
+                        
+                        let mut st = s_clone.borrow_mut();
+                        st.page_count += n_pages;
+                        st.is_modified = true;
+
+                        // === PRENDIAMO IL DOCUMENTO POPPLER SUL MAIN THREAD ===
+                        // Costruiamo il percorso assoluto verso la cartella della sessione
+                        let full_path = docs_dir().join(&dest_filename);
+                        let uri = gio::File::for_path(&full_path).uri();
+                        
+                        // Poppler viene caricato qui sul thread grafico: operazione istantanea
+                        // poiché l'indice del file è già strutturato e locale.
+                        if let Ok(doc) = poppler::Document::from_file(&uri, None) {
+                            st.pdf_cache.borrow_mut().insert(doc_id, doc);
+                        } else {
+                            eprintln!("[PDF-CACHE] Errore critico nel caricamento del file copiato in cache.");
+                        }
+
+                        if let Some((_id, idx)) = first_new_id {
+                            let _ = st.switch_to_page(idx);
+                        }
+                        
+                        let title = st.window_title();
+                        drop(st);
+                        
+                        w_clone.set_title(&title);
+                        crate::gui::sidebar::refresh_sidebar(&s_clone, &lb_clone, &c_clone, &sp_clone, &lt_clone);
+                        c_clone.queue_draw();
+                        
+                        glib::ControlFlow::Break
+                    }
+                    Ok(Err(e)) => {
+                        if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
+                        let alert = gtk::MessageDialog::new(
+                            Some(&w_clone), gtk::DialogFlags::MODAL, gtk::MessageType::Error, gtk::ButtonsType::Ok, "Errore importazione PDF"
+                        );
+                        alert.set_secondary_text(Some(&e));
+                        alert.run();
+                        unsafe { alert.destroy(); }
+                        glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(_) => {
+                        if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
+                        glib::ControlFlow::Break
+                    }
+                }
+            });
+            return;
+        }
+    }
+    unsafe { dialog.destroy(); }
+}
+
+pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>) {
+    let dialog = gtk::FileChooserDialog::new(
+        Some("Esporta PDF"),
+        Some(window),
+        gtk::FileChooserAction::Save,
+    );
+    dialog.add_buttons(&[
+        ("Annulla", gtk::ResponseType::Cancel),
+        ("Esporta", gtk::ResponseType::Accept),
+    ]);
+    dialog.set_current_name("documento_annotato.pdf");
+
+    if dialog.run() == gtk::ResponseType::Accept {
+        if let Some(path) = dialog.filename() {
+            unsafe { dialog.destroy(); }
+
+            let st = state.borrow();
+            let db_tmp_path = match st.db_tmp_path.clone() {
+                Some(p) => p,
+                None => return,
+            };
+            
+            if let Some(conn) = &st.db {
+                let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+            }
+            drop(st);
+
+            // Creiamo un dialog base per mostrare il progresso con i numeri di pagina
+            let loading_dialog = gtk::MessageDialog::new(
+                Some(window), gtk::DialogFlags::MODAL,
+                gtk::MessageType::Info, gtk::ButtonsType::None,
+                "Esportazione PDF in corso...\nInizializzazione...",
+            );
+            loading_dialog.show_all();
+
+            let (tx, rx) = std::sync::mpsc::channel();
+            let path_clone = path.clone();
+
+            std::thread::spawn(move || {
+                crate::export::export_document_to_pdf(&db_tmp_path, &path_clone, tx);
+            });
+
+            let w_clone = window.clone();
+            let loading_weak = loading_dialog.downgrade();
+
+            // Aggiorniamo la GUI in modo fluido leggendo i messaggi in arrivo dal thread
+            glib::idle_add_local(move || {
+                match rx.try_recv() {
+                    Ok(Ok(Some((corrente, totale)))) => {
+                        if let Some(ld) = loading_weak.upgrade() {
+                            if corrente == totale {
+                                ld.set_text(Some("Esportazione PDF in corso...\nFase Finale: Unione dei blocchi..."));
+                            } else {
+                                ld.set_text(Some(&format!("Esportazione PDF in corso...\nElaborazione pagina {} di {}", corrente, totale)));
+                            }
+                        }
+                        glib::ControlFlow::Continue
+                    }
+                    Ok(Ok(None)) => {
+                        // Finito con successo
+                        if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
+                        let success = gtk::MessageDialog::new(
+                            Some(&w_clone), gtk::DialogFlags::MODAL,
+                            gtk::MessageType::Info, gtk::ButtonsType::Ok,
+                            "Esportazione completata con successo!",
+                        );
+                        success.run();
+                        unsafe { success.destroy(); }
+                        glib::ControlFlow::Break
+                    }
+                    Ok(Err(e)) => {
+                        // Si è verificato un errore
+                        if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
+                        let alert = gtk::MessageDialog::new(
+                            Some(&w_clone), gtk::DialogFlags::MODAL,
+                            gtk::MessageType::Error, gtk::ButtonsType::Ok,
+                            "Errore esportazione",
+                        );
+                        alert.set_secondary_text(Some(&e));
+                        alert.run();
+                        unsafe { alert.destroy(); }
+                        glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(_) => {
+                        // Canale disconnesso in modo inaspettato
+                        if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
+                        glib::ControlFlow::Break
+                    }
+                }
+            });
+            return;
+        }
+    }
+    unsafe { dialog.destroy(); }
+}
 
 pub(crate) fn setup_file_ops(
     builder: &gtk::Builder,
@@ -272,6 +534,7 @@ pub(crate) fn setup_file_ops(
                     let xopp_pages = import_xopp(&chosen_clone).map_err(|e| e.to_string())?;
                     let _ = std::fs::remove_file(&tmp);
                     let conn = rusqlite::Connection::open(&tmp).map_err(|e| e.to_string())?;
+                    conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| e.to_string())?;
                     init_schema(&conn).map_err(|e| e.to_string())?;
 
                     for (i, xopp_page) in xopp_pages.iter().enumerate() {
@@ -282,16 +545,31 @@ pub(crate) fn setup_file_ops(
                         conn.execute("INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)", rusqlite::params![page_id, blob]).map_err(|e| e.to_string())?;
                     }
 
-                    let count    = page_count(&conn).unwrap_or(1);
-                    let first_id = page_id_at(&conn, 0).unwrap_or(1);
-                    let first_page = load_page(&conn, first_id).unwrap_or_default();
+                    // Propaghiamo l'errore reale invece di mascherarlo con unwrap_or:
+                    // se qualcosa va storto qui vogliamo VEDERLO in [DB] Errore apertura,
+                    // non ritrovarci silenziosamente con "1 pagina vuota".
+                    let count    = page_count(&conn).map_err(|e| e.to_string())?;
+                    let first_id = page_id_at(&conn, 0).map_err(|e| e.to_string())?;
+                    let first_page = load_page(&conn, first_id).map_err(|e| e.to_string())?;
                     Ok(OpenResult { page_count: count, first_id, first_page, conn, bundle_path: None, tmp })
                 } else {
                     import_bundle(&chosen_clone, &tmp).map_err(|e| e.to_string())?;
                     let conn = rusqlite::Connection::open(&tmp).map_err(|e| e.to_string())?;
-                    let count    = page_count(&conn).unwrap_or(1);
-                    let first_id = page_id_at(&conn, 0).unwrap_or(1);
-                    let first_page = load_page(&conn, first_id).unwrap_or_default();
+
+                    // Se il worker delle miniature (o qualunque altra connessione residua sullo
+                    // stesso file di sessione) sta ancora rilasciando un lock, aspettiamo invece
+                    // di fallire subito con SQLITE_BUSY.
+                    conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| e.to_string())?;
+
+                    // Il bundle .rastin può provenire da una versione precedente dell'app
+                    // (es. prima dell'introduzione delle colonne pdf_doc_id/pdf_page_index):
+                    // eseguiamo la stessa migrazione idempotente usata per i nuovi documenti,
+                    // così i file vecchi restano apribili senza perdere il supporto PDF.
+                    init_schema(&conn).map_err(|e| e.to_string())?;
+
+                    let count    = page_count(&conn).map_err(|e| e.to_string())?;
+                    let first_id = page_id_at(&conn, 0).map_err(|e| e.to_string())?;
+                    let first_page = load_page(&conn, first_id).map_err(|e| e.to_string())?;
                     Ok(OpenResult { page_count: count, first_id, first_page, conn, bundle_path: Some(chosen_clone), tmp })
                 }
             })();
@@ -317,6 +595,33 @@ pub(crate) fn setup_file_ops(
                     st.db = Some(res.conn); 
                     st.undo_stack.clear(); 
                     st.redo_stack.clear();
+
+                    // --- FIX SFONDO PDF/CACHE: il documento precedente lasciava riferimenti
+                    // e cache "sporche" (pdf_cache, pdf_surface_cache, thumbnail_cache,
+                    // image_cache), per cui la pagina non veniva mai davvero sostituita
+                    // a video (restava visibile lo sfondo/le miniature del documento vecchio).
+                    st.current_pdf_ref = st.db.as_ref()
+                        .and_then(|conn| get_page_pdf_ref(conn, res.first_id).ok().flatten())
+                        .map(|(doc_id, page_index)| PdfPageRef { doc_id, page_index });
+
+                    st.pdf_cache.borrow_mut().clear();
+                    st.pdf_surface_cache.borrow_mut().clear();
+                    st.thumbnail_cache.borrow_mut().clear();
+                    st.pending_thumbnails.borrow_mut().clear();
+                    st.image_cache.borrow_mut().clear();
+
+                    // --- FIX WORKER MINIATURE: il file di sessione ha sempre lo stesso path,
+                    // quindi il thread delle miniature non capirebbe da solo che il documento
+                    // è cambiato e continuerebbe a usare la vecchia connessione (causa di lock
+                    // e letture di dati stantii dopo l'apertura). Incrementando la generazione
+                    // e scartando le richieste già in coda (relative al documento precedente)
+                    // forziamo il worker a riconnettersi.
+                    st.doc_generation += 1;
+                    st.thumb_req_stack.lock().unwrap().clear();
+
+                    if let Some(pref) = st.current_pdf_ref {
+                        st.ensure_pdf_loaded(pref.doc_id);
+                    }
 
                     // --- FIX SEGNALIBRI: Ricarica l'indice dal nuovo database ---
                     st.rebuild_bookmark_index();
@@ -359,6 +664,30 @@ pub(crate) fn setup_file_ops(
 
     btn_open.connect_clicked(clone!(@strong do_open => move |_| do_open()));
     menu_open.connect_activate(clone!(@strong do_open => move |_| do_open()));
+
+    if let Some(file_import_pdf) = builder.object::<gtk::MenuItem>("file_import_pdf") {
+        let w = window.clone();
+        let s = state.clone();
+        let c = canvas.clone();
+        let sp = spin_page.clone();
+        let lt = lbl_tot.clone();
+        let pl = page_listbox.clone();
+        file_import_pdf.connect_activate(move |_| {
+            on_import_pdf_clicked(&w, &s, &c, &sp, &lt, &pl);
+        });
+    } else {
+        eprintln!("[UI] Voce di menu 'file_import_pdf' non trovata nel glade — import PDF non collegato");
+    }
+
+    if let Some(file_export_pdf) = builder.object::<gtk::MenuItem>("file_export_pdf") {
+        let w = window.clone();
+        let s = state.clone();
+        file_export_pdf.connect_activate(move |_| {
+            on_export_pdf_clicked(&w, &s);
+        });
+    } else {
+        eprintln!("[UI] Voce di menu 'file_export_pdf' non trovata nel glade — export PDF non collegato");
+    }
 }
 
 pub(crate) fn setup_autosave(state: &Rc<RefCell<AppState>>) {

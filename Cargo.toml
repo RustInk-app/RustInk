@@ -8,7 +8,7 @@ gtk    = { version = "0.18", features = ["v3_24"] }
 gdk    = { version = "0.18" }
 glib   = "0.18"
 gio    = "0.18"
-cairo-rs   = { version = "0.18" }
+cairo-rs   = { version = "0.18", features=["pdf"] }
 rusqlite   = { version = "0.31", features = ["bundled"] }
 zip        = { version = "2", default-features = false, features = ["deflate"] }
 quick-xml  = "0.31.0"
@@ -21,3 +21,6 @@ image = { version = "0.25", features = ["webp"] }
 tempfile = "3"
 fs2 = "0.4"
 lazy_static = "1.4.0"
+poppler-rs = { version = "0.22", features = ["v20_9"] }
+uuid = { version = "1", features = ["v4"] }
+lopdf = "0.33.0"

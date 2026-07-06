@@ -1,27 +1,18 @@
 use crate::models::color::*;
-use crate::models::image::*;
 use crate::models::page::*;
 use crate::models::select::*;
 use crate::models::stroke::*;
 use crate::models::textbox::*;
 
-use crate::translate_xournal::*;
-
 use crate::save_handler::autosave;
 use crate::save_handler::db::*;
 
 use gtk::cairo;
-use gtk::gdk;
 use gtk::prelude::*;
-use gtk::{Application, Builder, CssProvider, Window};
-
-use glib::Propagation;
-use glib::clone;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EventTrigger {
@@ -81,6 +72,21 @@ pub struct AppState {
     pub bookmarked_pages: std::collections::HashSet<usize>, // Solo per filtering veloce
     
     pub current_shape: Option<ShapeBlock>,
+    pub current_pdf_ref: Option<crate::models::page::PdfPageRef>,
+    pub pdf_cache: RefCell<std::collections::HashMap<i64, poppler::Document>>,
+    pub pdf_surface_cache: RefCell<std::collections::HashMap<(i64, i64, u32), cairo::ImageSurface>>,
+    
+    pub thumbnail_cache: RefCell<std::collections::HashMap<usize, cairo::ImageSurface>>,
+    pub pending_thumbnails: RefCell<std::collections::HashSet<usize>>,
+
+    pub thumb_req_stack: std::sync::Arc<std::sync::Mutex<Vec<(std::path::PathBuf, usize, u64)>>>,
+    pub thumb_wakeup_tx: Option<std::sync::mpsc::Sender<()>>,
+
+    /// Incrementato ogni volta che un documento (nuovo o aperto) viene caricato.
+    /// Serve a far capire al worker delle miniature che deve riaprire la connessione
+    /// al database, anche se il PATH del file su disco è rimasto lo stesso
+    /// (il file della sessione ha sempre lo stesso nome fisso: struttura.sqlite).
+    pub doc_generation: u64,
 }
 
 #[derive(Default, Debug)]
@@ -154,6 +160,18 @@ impl AppState {
             bookmarked_pages: std::collections::HashSet::new(),
             
             current_shape: None,
+
+            current_pdf_ref: None,
+
+            pdf_cache: RefCell::new(std::collections::HashMap::new()),
+            pdf_surface_cache: RefCell::new(std::collections::HashMap::new()),
+            
+            thumbnail_cache: RefCell::new(std::collections::HashMap::new()),
+            pending_thumbnails: RefCell::new(std::collections::HashSet::new()),
+
+            thumb_req_stack: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            thumb_wakeup_tx: None,
+            doc_generation: 0,
         }
     }
 
@@ -189,6 +207,17 @@ impl AppState {
         self.release_lock();
         self.db_tmp_path = Some(tmp);
         self.db = Some(conn);
+
+        // Nuovo documento = nuova "generazione": il worker delle miniature deve
+        // riaprire la connessione anche se il path del file è lo stesso.
+        self.doc_generation += 1;
+        self.current_pdf_ref = None;
+        self.pdf_cache.borrow_mut().clear();
+        self.pdf_surface_cache.borrow_mut().clear();
+        self.thumbnail_cache.borrow_mut().clear();
+        self.pending_thumbnails.borrow_mut().clear();
+        self.image_cache.borrow_mut().clear();
+
         Ok(())
     }
 
@@ -224,7 +253,7 @@ impl AppState {
             }
         }
     }
-    // Sostituisci il vecchio switch_to_page con questo che aggiorna l'UI del segnalibro
+    
     pub fn switch_to_page(&mut self, new_index: usize) -> rusqlite::Result<()> {
         if new_index == self.current_page { return Ok(()); }
         if let Some(conn) = &self.db {
@@ -234,13 +263,40 @@ impl AppState {
             self.current_page_id = new_id;
             self.paper_background = page.background.clone();
             self.current_page_data = page.clone();
-            
-            // Aggiorna l'icona del segnalibro in base allo stato della nuova pagina
+
+            // --- nuovo: risolvi il riferimento PDF (NULL-safe) ---
+            self.current_pdf_ref = get_page_pdf_ref(conn, new_id)?
+                .map(|(doc_id, page_index)| crate::models::page::PdfPageRef { doc_id, page_index });
+
+            if let Some(pref) = self.current_pdf_ref {
+                self.ensure_pdf_loaded(pref.doc_id);
+            }
+
             if let Some(cb) = &self.update_bookmark_ui {
                 cb(page.is_bookmarked);
             }
         }
         Ok(())
+    }
+
+    /// Carica in cache (se non già presente) il poppler::Document per un dato pdf_doc_id.
+    pub fn ensure_pdf_loaded(&self, doc_id: i64) {
+        if self.pdf_cache.borrow().contains_key(&doc_id) {
+            return;
+        }
+        let Some(conn) = &self.db else { return };
+        let Ok(row) = get_pdf_document(conn, doc_id) else { return };
+
+        // Il path è relativo alla cartella di sessione (docs/<uuid>.pdf)
+        let full_path = crate::save_handler::autosave::SESSION_TEMP_DIR
+            .path()
+            .join(&row.relative_path);
+
+        let uri = gio::File::for_path(&full_path).uri();
+        match poppler::Document::from_file(&uri, None) {
+            Ok(doc) => { self.pdf_cache.borrow_mut().insert(doc_id, doc); }
+            Err(e) => eprintln!("[PDF] Impossibile caricare {:?}: {e}", full_path),
+        }
     }
 
     pub fn commit_component(&mut self, payload: ComponentPayload) {
@@ -251,6 +307,8 @@ impl AppState {
                     self.undo_stack.push(new_id);
                     self.redo_stack.clear();
                     self.is_modified = true;
+                    self.thumbnail_cache.borrow_mut().remove(&self.current_page);
+                    
                     eprintln!(
                         "[DB] append component id={new_id}, undo_stack={}",
                         self.undo_stack.len()

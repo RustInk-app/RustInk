@@ -28,11 +28,7 @@ pub(crate) fn setup_canvas_events(
     
     
     let s = state.clone();
-    let c = canvas.clone();
-    let w = window.clone();
-    
     {
-    
     canvas.connect_button_press_event(clone!(@strong state, @strong window as w, @strong canvas as c => move |_, event| {
         let button = event.button();
 
@@ -117,9 +113,6 @@ pub(crate) fn setup_canvas_events(
                 
                 
                 let default_style = s.borrow().current_text_style.clone();
-                let text_width    = s.borrow().current_text_width;
-
-                
                 
                 if let Some((text, style)) = show_text_input_dialog(&w, &default_style) {
                     let mut st = s.borrow_mut();

@@ -96,6 +96,14 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             bookmark_name TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS pdf_documents (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            relative_path   TEXT NOT NULL,  
+            original_name   TEXT NOT NULL,
+            page_count      INTEGER NOT NULL,
+            imported_at     INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS base_layers (
             page_id    INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
             baked_blob BLOB NOT NULL
@@ -113,11 +121,126 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     ",
     )?;
 
+    migrate_add_pdf_columns(conn)?;
+
     // Fallback sicuro per aggiungere le colonne se il database esisteva già in precedenza
     let _ = conn.execute("ALTER TABLE pages ADD COLUMN is_bookmarked INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE pages ADD COLUMN bookmark_name TEXT", []);
 
     Ok(())
+}
+
+fn migrate_add_pdf_columns(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(pages)")?;
+    let existing_cols: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt);
+
+    if !existing_cols.iter().any(|c| c == "pdf_doc_id") {
+        eprintln!("[MIGRATE] Aggiungo colonna pdf_doc_id a pages");
+        conn.execute("ALTER TABLE pages ADD COLUMN pdf_doc_id INTEGER", [])?;
+    }
+    if !existing_cols.iter().any(|c| c == "pdf_page_index") {
+        eprintln!("[MIGRATE] Aggiungo colonna pdf_page_index a pages");
+        conn.execute("ALTER TABLE pages ADD COLUMN pdf_page_index INTEGER", [])?;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct PdfDocumentRow {
+    pub id: i64,
+    pub relative_path: String,
+    pub original_name: String,
+    pub page_count: i64,
+}
+
+pub fn insert_pdf_document(
+    conn: &rusqlite::Connection,
+    relative_path: &str,
+    original_name: &str,
+    page_count: i64,
+) -> rusqlite::Result<i64> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    conn.execute(
+        "INSERT INTO pdf_documents (relative_path, original_name, page_count, imported_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![relative_path, original_name, page_count, ts],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn get_pdf_document(conn: &rusqlite::Connection, id: i64) -> rusqlite::Result<PdfDocumentRow> {
+    conn.query_row(
+        "SELECT id, relative_path, original_name, page_count FROM pdf_documents WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(PdfDocumentRow {
+                id: row.get(0)?,
+                relative_path: row.get(1)?,
+                original_name: row.get(2)?,
+                page_count: row.get(3)?,
+            })
+        },
+    )
+}
+
+/// Crea una nuova pagina RASTIN agganciata a una pagina specifica del PDF.
+pub fn insert_pdf_backed_page(
+    conn: &rusqlite::Connection,
+    display_order: i64,
+    pdf_doc_id: i64,
+    pdf_page_index: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO pages (display_order, pdf_doc_id, pdf_page_index) VALUES (?1, ?2, ?3)",
+        rusqlite::params![display_order, pdf_doc_id, pdf_page_index],
+    )?;
+    let page_id = conn.last_insert_rowid();
+
+    // base_layers vuoto: nessuno stroke ancora, il "contenuto" visivo iniziale è il PDF
+    conn.execute(
+        "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)",
+        rusqlite::params![page_id, encode_payload_list(&[])],
+    )?;
+    Ok(page_id)
+}
+
+/// Ritorna (pdf_doc_id, pdf_page_index) per una pagina, se presente.
+/// NULL-safe: le pagine vecchie (o non-PDF) ritornano Ok(None) invece di errore.
+pub fn get_page_pdf_ref(
+    conn: &rusqlite::Connection,
+    page_id: i64,
+) -> rusqlite::Result<Option<(i64, i64)>> {
+    conn.query_row(
+        "SELECT pdf_doc_id, pdf_page_index FROM pages WHERE id = ?1",
+        [page_id],
+        |row| {
+            let doc_id: Option<i64> = row.get(0)?;
+            let page_idx: Option<i64> = row.get(1)?;
+            Ok(doc_id.zip(page_idx))
+        },
+    )
+}
+
+pub fn ensure_pdf_schema(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pdf_documents (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            relative_path   TEXT NOT NULL,
+            original_name   TEXT NOT NULL,
+            page_count      INTEGER NOT NULL,
+            imported_at     INTEGER NOT NULL
+        )",
+        [],
+    )?;
+    migrate_add_pdf_columns(conn)
 }
 
 pub fn update_page_background(
@@ -501,4 +624,57 @@ pub fn import_bundle(bundle_path: &Path, dest_path: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+// Aggiungi questo in fondo a src/save_handler/db.rs
+
+/// Inserisce massivamente tutte le pagine di un PDF usando una Transazione
+/// e dei Prepared Statements per garantire prestazioni istantanee.
+pub fn insert_pdf_backed_pages_bulk(
+    conn: &mut rusqlite::Connection, // Deve essere mutabile per avviare una transazione
+    start_order: i64,
+    pdf_doc_id: i64,
+    n_pages: usize,
+) -> rusqlite::Result<i64> {
+    // 1. Avvia la transazione. Tutti gli insert avverranno in memoria (RAM)
+    // e verranno scritti su disco solo al momento del commit.
+    let tx = conn.transaction()?;
+
+    let mut first_new_id = 0;
+
+    // 2. Pre-calcoliamo il blob vuoto una volta sola per non serializzarlo ad ogni ciclo
+    let empty_blob = encode_payload_list(&[]);
+
+    {
+        // 3. Prepariamo gli statement SQL fuori dal ciclo.
+        // Questo evita che SQLite debba ri-compilare la query ad ogni iterazione.
+        let mut stmt_page = tx.prepare(
+            "INSERT INTO pages (display_order, pdf_doc_id, pdf_page_index) VALUES (?1, ?2, ?3)"
+        )?;
+        let mut stmt_layer = tx.prepare(
+            "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)"
+        )?;
+
+        // 4. Eseguiamo il ciclo ad altissima velocità
+        for i in 0..n_pages {
+            let display_order = start_order + i as i64;
+            let pdf_page_index = i as i64;
+
+            stmt_page.execute(rusqlite::params![display_order, pdf_doc_id, pdf_page_index])?;
+
+            // Recupera l'ID appena generato
+            let page_id = tx.last_insert_rowid();
+
+            if i == 0 {
+                first_new_id = page_id;
+            }
+
+            stmt_layer.execute(rusqlite::params![page_id, &empty_blob])?;
+        }
+    } // I prepared statement vengono scartati qui per liberare la transazione
+
+    // 5. Scrive fisicamente tutto su disco in un'unica singola operazione
+    tx.commit()?;
+
+    Ok(first_new_id)
 }

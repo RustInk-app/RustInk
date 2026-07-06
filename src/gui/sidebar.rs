@@ -1,7 +1,5 @@
-use crate::models::page::*;
 use crate::save_handler::db::*;
 use crate::gui::state::*;
-use crate::gui::drawing::draw_page;
 
 use gtk::prelude::*;
 use gtk::gdk;
@@ -82,6 +80,122 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         }
         true
     })));
+
+    // --- START THREAD BACKGROUND PER LE MINIATURE (PRIORITA' LIFO) ---
+    let req_stack = state.borrow().thumb_req_stack.clone();
+    let (tx_wake, rx_wake) = std::sync::mpsc::channel::<()>();
+    let (tx_res, rx_res) = glib::MainContext::channel(glib::Priority::DEFAULT);
+
+    state.borrow_mut().thumb_wakeup_tx = Some(tx_wake);
+
+    std::thread::spawn(move || {
+        let mut current_db_key: Option<(std::path::PathBuf, u64)> = None;
+        let mut conn: Option<rusqlite::Connection> = None;
+        
+        // Mantiene il PDF in RAM separatamente per il worker, risolvendo i crash e le righe!
+        let mut poppler_cache = std::collections::HashMap::<i64, poppler::Document>::new();
+        let pdf_surface_cache = std::cell::RefCell::new(std::collections::HashMap::new());
+
+        // Il thread dorme finché non riceve un input
+        while rx_wake.recv().is_ok() {
+            loop {
+                // Preleva SEMPRE l'ULTIMA miniatura richiesta (LIFO = quelle appena scrollate!)
+                let req = {
+                    let mut stack = req_stack.lock().unwrap();
+                    stack.pop()
+                };
+
+                match req {
+                    Some((db_path, page_index, generation)) => {
+                        let key = (db_path.clone(), generation);
+                        if current_db_key != Some(key.clone()) {
+                            // Documento cambiato (anche se il path fisico è identico, com'è
+                            // sempre il caso per il file di sessione): chiudiamo la vecchia
+                            // connessione e ne apriamo una nuova, altrimenti restiamo agganciati
+                            // al file precedente e blocchiamo/leggiamo dati vecchi quando il
+                            // programma sovrascrive struttura.sqlite con un documento appena aperto.
+                            conn = None;
+                            current_db_key = Some(key);
+                            conn = rusqlite::Connection::open_with_flags(
+                                &db_path,
+                                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI
+                            ).ok();
+                            if let Some(c) = &conn {
+                                let _ = c.busy_timeout(std::time::Duration::from_secs(3));
+                            }
+                            poppler_cache.clear();
+                            pdf_surface_cache.borrow_mut().clear();
+                        }
+
+                        if let Some(c) = &conn {
+                            if let Ok(page_id) = crate::save_handler::db::page_id_at(c, page_index) {
+                                if let Ok(page_data) = crate::save_handler::db::load_page(c, page_id) {
+                                    
+                                    let pdf_bg_ref = if let Ok(Some((doc_id, pdf_idx))) = crate::save_handler::db::get_page_pdf_ref(c, page_id) {
+                                        // Usa la cache locale per non chiamare mai più from_file due volte!
+                                        let doc = poppler_cache.entry(doc_id).or_insert_with(|| {
+                                            let row = crate::save_handler::db::get_pdf_document(c, doc_id).unwrap();
+                                            let full_path = crate::save_handler::autosave::SESSION_TEMP_DIR.path().join(&row.relative_path);
+                                            let uri = gio::File::for_path(&full_path).uri();
+                                            poppler::Document::from_file(&uri, None).unwrap()
+                                        });
+                                        Some((&*doc, doc_id, pdf_idx))
+                                    } else {
+                                        None
+                                    };
+
+                                    let mut surf = cairo::ImageSurface::create(cairo::Format::ARgb32, 100, 140).unwrap();
+                                    let cr = cairo::Context::new(&surf).unwrap();
+                                    cr.set_source_rgb(1.0, 1.0, 1.0);
+                                    cr.paint().unwrap();
+                                    
+                                    let zoom = 100.0 / crate::models::page::PAGE_W;
+                                    cr.scale(zoom, zoom);
+                                    
+                                    let empty_image_cache = std::cell::RefCell::new(std::collections::HashMap::new());
+                                    
+                                    crate::gui::drawing::draw_page(
+                                        &cr, &page_data, 0.0, 0.0, zoom, &empty_image_cache, 
+                                        &page_data.background, pdf_bg_ref, &pdf_surface_cache
+                                    );
+                                    
+                                    drop(cr);
+                                    let pixels = surf.data().unwrap().to_vec();
+                                    let _ = tx_res.send((page_index, pixels));
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        conn = None;
+                        current_db_key = None;
+                        poppler_cache.clear();
+                        pdf_surface_cache.borrow_mut().clear();
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    let s_cache = state.clone();
+    let lb_refresh = page_listbox.clone();
+    rx_res.attach(None, move |(idx, pixels)| {
+        let st = s_cache.borrow();
+        st.pending_thumbnails.borrow_mut().remove(&idx);
+        
+        let mut surf = cairo::ImageSurface::create(cairo::Format::ARgb32, 100, 140).unwrap();
+        {
+            let mut data = surf.data().unwrap();
+            data.copy_from_slice(&pixels);
+        }
+        st.thumbnail_cache.borrow_mut().insert(idx, surf);
+        
+        lb_refresh.queue_draw(); // Aggiorna graficamente
+        glib::ControlFlow::Continue
+    });
+    // --- FINE THREAD BACKGROUND ---
+
    page_listbox
 }
 
@@ -135,20 +249,34 @@ pub fn refresh_sidebar(
         }
 
         let s_clone = state.clone();
+        let p_index = i; // Usiamo l'indice della pagina
+
         thumb_canvas.connect_draw(move |_, cr| {
-            cr.set_source_rgb(1.0, 1.0, 1.0);
-            cr.paint().unwrap();
-            if let Some(conn) = &s_clone.borrow().db {
-                if let Ok(page_id) = page_id_at(conn, i) {
-                    if let Ok(page_data) = load_page(conn, page_id) {
-                        let zoom = 100.0 / PAGE_W;
-                        cr.scale(zoom, zoom);
-                        draw_page(cr, &page_data, 0.0, 0.0, &s_clone.borrow().image_cache, &page_data.background);
+            let st = s_clone.borrow();
+            
+            if let Some(surf) = st.thumbnail_cache.borrow().get(&p_index) {
+                cr.set_source_surface(surf, 0.0, 0.0).unwrap();
+                cr.paint().unwrap();
+            } else {
+                cr.set_source_rgb(0.9, 0.9, 0.92); // Quadrato di attesa grigio
+                cr.paint().unwrap();
+                
+                let mut pending = st.pending_thumbnails.borrow_mut();
+                if !pending.contains(&p_index) {
+                    pending.insert(p_index);
+                    if let (Some(tx), Some(db_path)) = (&st.thumb_wakeup_tx, &st.db_tmp_path) {
+                        // 1. Inseriamo la pagina in CIMA alla lista, insieme alla generazione
+                        // corrente del documento (serve al worker per capire se deve
+                        // riaprire la connessione anche se il path è lo stesso).
+                        st.thumb_req_stack.lock().unwrap().push((db_path.clone(), p_index, st.doc_generation));
+                        // 2. Svegliamo il worker
+                        let _ = tx.send(());
                     }
                 }
             }
             Propagation::Proceed
         });
+
 
         // Contenitore Orizzontale per Nome + Tasto Cancella Segnalibro
         let label = gtk::Label::new(Some(&page_label));

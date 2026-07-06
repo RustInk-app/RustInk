@@ -73,6 +73,12 @@ pub struct PageData {
     pub bookmark_name: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PdfPageRef {
+    pub doc_id: i64,
+    pub page_index: i64, // 0-based, indice nel poppler::Document
+}
+
 impl PageData {
     pub fn new() -> Self {
         Self {

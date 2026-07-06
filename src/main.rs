@@ -2,6 +2,7 @@ mod models;
 mod gui;
 mod save_handler;
 mod translate_xournal;
+mod export; 
 
 use crate::models::color;
 use crate::models::textbox;
@@ -11,7 +12,6 @@ use crate::models::stroke;
 
 use crate::gui::build_ui;
 use crate::save_handler::autosave::*;
-use crate::save_handler::db::*;
 
 use gtk::prelude::*;
 use gtk::{Application};

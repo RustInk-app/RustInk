@@ -15,6 +15,7 @@ pub static SESSION_TEMP_DIR: LazyLock<TempDir> = LazyLock::new(|| {
 
     let _ = std::fs::create_dir_all(dir.path().join("media"));
     let _ = std::fs::create_dir_all(dir.path().join("backup"));
+    let _ = std::fs::create_dir_all(dir.path().join("docs"));
 
     let lock_path = dir.path().join("session.lock");
     let lock_file = File::create(lock_path).expect("Impossibile creare lockfile");
@@ -33,6 +34,10 @@ pub fn temp_db_dir() -> PathBuf {
 
 pub fn media_dir() -> PathBuf {
     SESSION_TEMP_DIR.path().join("media")
+}
+
+pub fn docs_dir() -> PathBuf {
+    SESSION_TEMP_DIR.path().join("docs")
 }
 
 pub fn backup_dir() -> PathBuf {
