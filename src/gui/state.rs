@@ -44,7 +44,6 @@ pub struct AppState {
     pub page_origin: (f64, f64),
 
     pub current_text_style: TextStyle,
-    pub current_text_width: f64,
     pub text_id_counter: u64,
 
     pub zoom: f64,
@@ -136,7 +135,6 @@ impl AppState {
             active_tool: Tool::Pen,
             page_origin: (0.0, 0.0),
             current_text_style: TextStyle::default(),
-            current_text_width: 300.0,
             text_id_counter: 0,
             zoom: 1.0,
             scroll_offset_y: 0.0,

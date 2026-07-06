@@ -151,10 +151,7 @@ fn migrate_add_pdf_columns(conn: &rusqlite::Connection) -> rusqlite::Result<()> 
 
 #[derive(Clone, Debug)]
 pub struct PdfDocumentRow {
-    pub id: i64,
     pub relative_path: String,
-    pub original_name: String,
-    pub page_count: i64,
 }
 
 pub fn insert_pdf_document(
@@ -182,34 +179,10 @@ pub fn get_pdf_document(conn: &rusqlite::Connection, id: i64) -> rusqlite::Resul
         [id],
         |row| {
             Ok(PdfDocumentRow {
-                id: row.get(0)?,
                 relative_path: row.get(1)?,
-                original_name: row.get(2)?,
-                page_count: row.get(3)?,
             })
         },
     )
-}
-
-/// Crea una nuova pagina RASTIN agganciata a una pagina specifica del PDF.
-pub fn insert_pdf_backed_page(
-    conn: &rusqlite::Connection,
-    display_order: i64,
-    pdf_doc_id: i64,
-    pdf_page_index: i64,
-) -> rusqlite::Result<i64> {
-    conn.execute(
-        "INSERT INTO pages (display_order, pdf_doc_id, pdf_page_index) VALUES (?1, ?2, ?3)",
-        rusqlite::params![display_order, pdf_doc_id, pdf_page_index],
-    )?;
-    let page_id = conn.last_insert_rowid();
-
-    // base_layers vuoto: nessuno stroke ancora, il "contenuto" visivo iniziale è il PDF
-    conn.execute(
-        "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)",
-        rusqlite::params![page_id, encode_payload_list(&[])],
-    )?;
-    Ok(page_id)
 }
 
 /// Ritorna (pdf_doc_id, pdf_page_index) per una pagina, se presente.

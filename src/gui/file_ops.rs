@@ -530,6 +530,7 @@ pub(crate) fn setup_file_ops(
 
         std::thread::spawn(move || {
             let result = (|| -> Result<OpenResult, String> {
+                
                 if ext_clone == "xopp" {
                     let xopp_pages = import_xopp(&chosen_clone).map_err(|e| e.to_string())?;
                     let _ = std::fs::remove_file(&tmp);
@@ -538,16 +539,23 @@ pub(crate) fn setup_file_ops(
                     init_schema(&conn).map_err(|e| e.to_string())?;
 
                     for (i, xopp_page) in xopp_pages.iter().enumerate() {
-                        conn.execute("INSERT INTO pages (display_order) VALUES (?1)", rusqlite::params![i as i64]).map_err(|e| e.to_string())?;
+                        let bg_int = match xopp_page.background {
+                            PaperBackground::Ruled => 0,
+                            PaperBackground::Plain => 1,
+                            PaperBackground::Grid => 2,
+                        };
+                        conn.execute(
+                            "INSERT INTO pages (display_order, background) VALUES (?1, ?2)",
+                            rusqlite::params![i as i64, bg_int],
+                        ).map_err(|e| e.to_string())?;
                         let page_id = conn.last_insert_rowid();
-                        let components: Vec<ComponentPayload> = xopp_page.strokes.iter().map(|s: &Stroke| ComponentPayload::PenStroke(s.clone())).collect();
-                        let blob = encode_payload_list(&components);
-                        conn.execute("INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)", rusqlite::params![page_id, blob]).map_err(|e| e.to_string())?;
+                        let blob = encode_payload_list(&xopp_page.components);
+                        conn.execute(
+                            "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)",
+                            rusqlite::params![page_id, blob],
+                        ).map_err(|e| e.to_string())?;
                     }
 
-                    // Propaghiamo l'errore reale invece di mascherarlo con unwrap_or:
-                    // se qualcosa va storto qui vogliamo VEDERLO in [DB] Errore apertura,
-                    // non ritrovarci silenziosamente con "1 pagina vuota".
                     let count    = page_count(&conn).map_err(|e| e.to_string())?;
                     let first_id = page_id_at(&conn, 0).map_err(|e| e.to_string())?;
                     let first_page = load_page(&conn, first_id).map_err(|e| e.to_string())?;
