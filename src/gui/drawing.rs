@@ -267,22 +267,24 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
         let alloc = widget.allocation();
         let w = alloc.width() as f64;
         
-        
+        // Sfondo grigio della finestra di base
         cr.set_source_rgb(0.18, 0.18, 0.22);
         let _ = cr.paint();
 
         let zoom = s.borrow().zoom;
-        let scroll_y = s.borrow().scroll_offset_y;
-
+        
+        // --- NUOVO: Margine fisso decorativo tra il foglio e l'interfaccia ---
+        let margin = 40.0; 
         
         let page_w_zoomed = PAGE_W * zoom;
-        let ox_widget = ((w - page_w_zoomed) / 2.0).max(PAGE_MARGIN);
-        let oy_widget = PAGE_MARGIN - scroll_y * zoom;
-
+        let page_h_zoomed = PAGE_H * zoom;
         
+        // L'origine Y è sempre ancorata al margine. Sarà GTK a muovere tutto in alto/basso!
+        let ox_widget = ((w - page_w_zoomed) / 2.0).max(margin);
+        let oy_widget = margin; 
+
         s.borrow_mut().page_origin = (ox_widget, oy_widget);
 
-        
         cr.save().ok();
         cr.translate(ox_widget, oy_widget);
         cr.scale(zoom, zoom);
@@ -337,8 +339,9 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
         cr.restore().ok();
 
         
-        let needed_h = (PAGE_H * zoom + PAGE_MARGIN * 2.0) as i32;
-        let needed_w = (PAGE_W * zoom + PAGE_MARGIN * 2.0) as i32;
+        // Sostituisci le vecchie righe del set_size_request con queste:
+        let needed_h = (page_h_zoomed + margin * 2.0) as i32;
+        let needed_w = (page_w_zoomed + margin * 2.0) as i32;
         widget.set_size_request(needed_w, needed_h);
 
         Propagation::Proceed

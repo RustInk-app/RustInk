@@ -130,7 +130,7 @@ pub fn build_ui(app: &gtk::Application) {
             {
                 let mut st = s.borrow_mut();
                 st.zoom = zoom;
-                st.scroll_offset_y = 0.0;
+                // st.scroll_offset_y = 0.0;
             }
             zp.set_text(&format!("{:.0}%", zoom * 100.0));
             c.queue_draw();

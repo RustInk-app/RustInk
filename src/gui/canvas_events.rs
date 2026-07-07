@@ -81,7 +81,10 @@ pub(crate) fn setup_canvas_events(
         
         if px < 0.0 || px > PAGE_W || py < 0.0 || py > PAGE_H {
             if tool == Tool::Select {
-                state.borrow_mut().selected_index = None;
+                let mut st = state.borrow_mut();
+                st.selected_index = None;
+                st.selected_indices.clear();
+                drop(st);
                 c.queue_draw();
             }
             return Propagation::Proceed;
@@ -99,6 +102,7 @@ pub(crate) fn setup_canvas_events(
             }
             Tool::Eraser => {
                 let mut st = s.borrow_mut();
+                st.save_snapshot();
                 st.is_drawing = true; 
                 
                 
@@ -166,12 +170,17 @@ pub(crate) fn setup_canvas_events(
                 if !handled {
                     let hit = hit_test_component(&st.current_page_data, px, py);
                     if let Some(idx) = hit {
-                        
                         if !st.selected_indices.contains(&idx) {
                             st.selected_indices = vec![idx];
                         }
-                        
-                        
+                        // Sincronizza selected_index col nuovo contenuto di selected_indices,
+                        // altrimenti resta "appeso" a un valore vecchio (es. da un paste precedente)
+                        st.selected_index = if st.selected_indices.len() == 1 {
+                            Some(st.selected_indices[0])
+                        } else {
+                            None
+                        };
+
                         let mut orig_positions = Vec::new();
                         for &s_idx in &st.selected_indices {
                             if let Some(comp) = st.current_page_data.components.get(s_idx) {
@@ -186,10 +195,14 @@ pub(crate) fn setup_canvas_events(
                         }
                         st.drag_mode = DragMode::Move { start_px: px, start_py: py, orig_positions };
                     } else {
-                        
                         st.selected_indices.clear();
+                        st.selected_index = None; // <-- aggiunta: sincronizza anche qui
                         st.drag_mode = DragMode::Marquee { start_px: px, start_py: py, current_px: px, current_py: py };
                     }
+                }
+
+                if matches!(st.drag_mode, DragMode::Move { .. } | DragMode::Resize { .. }) {
+                    st.save_snapshot();
                 }
             }
             Tool::Shape(kind) => {
@@ -255,10 +268,15 @@ pub(crate) fn setup_canvas_events(
                 }
                 DragMode::Marquee { start_px, start_py, .. } => {
                     let mut st = s.borrow_mut();
-                    
                     st.drag_mode = DragMode::Marquee { start_px, start_py, current_px: px, current_py: py };
-                    
                     st.selected_indices = hit_test_marquee(&st.current_page_data, start_px, start_py, px, py);
+                    // Sincronizza anche qui, altrimenti dopo un rubber-band su un solo
+                    // elemento selected_index resterebbe quello di una selezione precedente
+                    st.selected_index = if st.selected_indices.len() == 1 {
+                        Some(st.selected_indices[0])
+                    } else {
+                        None
+                    };
                     c.queue_draw();
                 }
                 DragMode::Resize { ref handle, orig_x, orig_y, orig_w, orig_h, start_px, start_py } => {
@@ -439,6 +457,8 @@ pub(crate) fn setup_canvas_events(
                                     }
                                 }
                             }
+
+                            st.undo_stack.pop();
                             st.drag_mode = DragMode::None;
                             drop(st);
                             c.queue_draw();
@@ -476,8 +496,8 @@ pub(crate) fn setup_canvas_events(
 
                         st.is_modified = true;
                         
-                        st.undo_stack.clear();
-                        st.redo_stack.clear();
+                        // st.undo_stack.clear();
+                        // st.redo_stack.clear();
 
                         let title = st.window_title();
                         st.drag_mode = DragMode::None;
@@ -507,8 +527,8 @@ pub(crate) fn setup_canvas_events(
                         }
                         
                         st.is_modified = true;
-                        st.undo_stack.clear();
-                        st.redo_stack.clear();
+                        // st.undo_stack.clear();
+                        // st.redo_stack.clear();
 
                         let title = st.window_title();
                         st.drag_mode = DragMode::None;
@@ -561,8 +581,8 @@ pub(crate) fn setup_canvas_events(
                     );
                 }
                 st.is_modified = true;
-                st.undo_stack.clear();
-                st.redo_stack.clear();
+                // st.undo_stack.clear();
+                // st.redo_stack.clear();
 
                 let title = st.window_title();
                 drop(st);
@@ -596,83 +616,69 @@ pub(crate) fn setup_canvas_events(
         let c = canvas.clone();
         let sp = spin_page.clone();
         let lt = lbl_tot.clone();
-        canvas.connect_scroll_event(move |_, event| {
-        let (_, delta_y) = event.scroll_deltas().unwrap_or((0.0, 0.0));
-        let delta_y = if delta_y == 0.0 {
-            match event.direction() {
-                gdk::ScrollDirection::Down => 1.0,
-                gdk::ScrollDirection::Up   => -1.0,
-                _                          => 0.0,
-            }
-        } else {
-            delta_y
-        };
+        
+        canvas.connect_scroll_event(move |canvas_widget, event| {
+            let (_, delta_y) = event.scroll_deltas().unwrap_or((0.0, 0.0));
+            let delta_y = if delta_y == 0.0 {
+                match event.direction() {
+                    gdk::ScrollDirection::Down => 1.0,
+                    gdk::ScrollDirection::Up   => -1.0,
+                    _                          => 0.0,
+                }
+            } else {
+                delta_y
+            };
 
-        if delta_y == 0.0 { return Propagation::Proceed; }
+            if delta_y == 0.0 { return Propagation::Proceed; }
 
-        let zoom = s.borrow().zoom;
-
-        if zoom <= 1.0 {
-            
+            let zoom = s.borrow().zoom;
             let (cur, count) = {
                 let st = s.borrow();
                 (st.current_page, st.page_count)
             };
-            if delta_y > 0.0 && cur + 1 < count {
-                let _ = s.borrow_mut().switch_to_page(cur + 1);
-                { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
-                c.queue_draw();
-            } else if delta_y < 0.0 && cur > 0 {
-                let _ = s.borrow_mut().switch_to_page(cur - 1);
-                { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
-                c.queue_draw();
-            }
-            return Propagation::Stop;
-        }
 
-        
-        let scroll_speed = 40.0;
-        let max_offset = PAGE_H - PAGE_H / zoom;
-
-        let current_offset = s.borrow().scroll_offset_y;
-        let new_offset = (current_offset + delta_y * scroll_speed).clamp(0.0, max_offset);
-
-        let (cur, count) = {
-            let st = s.borrow();
-            (st.current_page, st.page_count)
-        };
-
-        if new_offset <= 0.0 && delta_y < 0.0 {
-            
-            if cur > 0 {
-                {
-                    let mut st = s.borrow_mut();
-                    let _ = st.switch_to_page(cur - 1);
-                    st.scroll_offset_y = max_offset;
+            // Esploriamo i parent per trovare la barra nativa GTK della ScrolledWindow
+            let mut vadj = None;
+            let mut current_parent = canvas_widget.parent();
+            while let Some(widget) = current_parent {
+                if let Ok(sw) = widget.clone().downcast::<gtk::ScrolledWindow>() {
+                    vadj = Some(sw.vadjustment());
+                    break;
                 }
-                { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
-            } else {
-                s.borrow_mut().scroll_offset_y = 0.0;
+                current_parent = widget.parent();
             }
-        } else if new_offset >= max_offset && delta_y > 0.0 {
-            
-            if cur + 1 < count {
-                {
-                    let mut st = s.borrow_mut();
-                    let _ = st.switch_to_page(cur + 1);
-                    st.scroll_offset_y = 0.0;
-                }
-                { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
-            } else {
-                s.borrow_mut().scroll_offset_y = max_offset;
-            }
-        } else {
-            s.borrow_mut().scroll_offset_y = new_offset;
-        }
 
-        c.queue_draw();
-        Propagation::Stop
-    });
+            if let Some(adj) = vadj {
+                let at_bottom = adj.value() + adj.page_size() >= adj.upper() - 1.0;
+                let at_top = adj.value() <= adj.lower() + 1.0;
+
+                // Se la barra nativa batte contro il fondo e l'utente scorre giù -> Prossima pagina
+                if zoom <= 1.0 || (delta_y > 0.0 && at_bottom) {
+                    if delta_y > 0.0 && cur + 1 < count {
+                        let _ = s.borrow_mut().switch_to_page(cur + 1);
+                        { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
+                        adj.set_value(adj.lower()); // Resetta la barra in cima alla nuova pagina
+                        c.queue_draw();
+                        return Propagation::Stop;
+                    }
+                }
+                
+                // Se la barra batte contro la cima e l'utente scorre su -> Pagina precedente
+                if zoom <= 1.0 || (delta_y < 0.0 && at_top) {
+                    if delta_y < 0.0 && cur > 0 {
+                        let _ = s.borrow_mut().switch_to_page(cur - 1);
+                        { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
+                        adj.set_value(adj.upper() - adj.page_size()); // Metti la barra in fondo alla pagina ripristinata
+                        c.queue_draw();
+                        return Propagation::Stop;
+                    }
+                }
+            }
+
+            // SE NON C'È DA CAMBIARE PAGINA:
+            // Procediamo! Lasciamo che GTK scorra la rotellina in perfetta sincronia con l'UI!
+            Propagation::Proceed
+        });
     }
 
 }

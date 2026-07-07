@@ -33,8 +33,8 @@ pub struct AppState {
     pub current_page_id: i64,
     pub current_page_data: PageData,
 
-    pub undo_stack: Vec<i64>,
-    pub redo_stack: Vec<i64>,
+    pub undo_stack: Vec<Vec<ComponentPayload>>,
+    pub redo_stack: Vec<Vec<ComponentPayload>>,
 
     pub current_color: Color,
     pub current_width: f64,
@@ -47,7 +47,7 @@ pub struct AppState {
     pub text_id_counter: u64,
 
     pub zoom: f64,
-    pub scroll_offset_y: f64,
+    // pub scroll_offset_y: f64,
 
     pub selected_index: Option<usize>,
     pub drag_mode: DragMode,
@@ -134,7 +134,7 @@ impl AppState {
             current_text_style: TextStyle::default(),
             text_id_counter: 0,
             zoom: 1.0,
-            scroll_offset_y: 0.0,
+            // scroll_offset_y: 0.0,
             selected_index: None,
             drag_mode: DragMode::None,
             image_cache: RefCell::new(std::collections::HashMap::new()),
@@ -297,19 +297,14 @@ impl AppState {
     }
 
     pub fn commit_component(&mut self, payload: ComponentPayload) {
+        self.save_snapshot(); // Fotografa lo stato PRIMA della modifica
+
         if let Some(conn) = &self.db {
             match append_active_component(conn, self.current_page_id, &payload) {
-                Ok(new_id) => {
+                Ok(_) => {
                     self.current_page_data.components.push(payload);
-                    self.undo_stack.push(new_id);
-                    self.redo_stack.clear();
                     self.is_modified = true;
                     self.thumbnail_cache.borrow_mut().remove(&self.current_page);
-                    
-                    eprintln!(
-                        "[DB] append component id={new_id}, undo_stack={}",
-                        self.undo_stack.len()
-                    );
                 }
                 Err(e) => eprintln!("[DB] ERRORE append_active_component: {e}"),
             }
@@ -317,34 +312,60 @@ impl AppState {
     }
 
     pub fn undo(&mut self) {
-        if let Some(id) = self.undo_stack.pop() {
-            if let Some(conn) = &self.db {
-                if let Err(e) = toggle_active_state(conn, id, false) {
-                    eprintln!("[DB] ERRORE undo toggle: {e}");
-                    self.undo_stack.push(id);
-                    return;
-                }
-            }
-            self.redo_stack.push(id);
-            self.reload_current_page();
+        if let Some(previous_components) = self.undo_stack.pop() {
+            self.redo_stack.push(self.current_page_data.components.clone());
+            self.current_page_data.components = previous_components;
+            self.sync_components_to_db();
+            
+            // Pulisci la selezione per evitare indici sballati
+            self.selected_indices.clear();
+            self.selected_index = None;
+            self.drag_mode = DragMode::None;
+            
             self.is_modified = true;
-            eprintln!("[DB] Undo id={id}");
+            self.thumbnail_cache.borrow_mut().remove(&self.current_page);
+            self.reload_current_page();
+            eprintln!("[UNDO] Ripristinato stato precedente");
         }
     }
 
     pub fn redo(&mut self) {
-        if let Some(id) = self.redo_stack.pop() {
-            if let Some(conn) = &self.db {
-                if let Err(e) = toggle_active_state(conn, id, true) {
-                    eprintln!("[DB] ERRORE redo toggle: {e}");
-                    self.redo_stack.push(id);
-                    return;
-                }
-            }
-            self.undo_stack.push(id);
-            self.reload_current_page();
+        if let Some(next_components) = self.redo_stack.pop() {
+            self.undo_stack.push(self.current_page_data.components.clone());
+            self.current_page_data.components = next_components;
+            self.sync_components_to_db();
+            
+            self.selected_indices.clear();
+            self.selected_index = None;
+            self.drag_mode = DragMode::None;
+            
             self.is_modified = true;
-            eprintln!("[DB] Redo id={id}");
+            self.thumbnail_cache.borrow_mut().remove(&self.current_page);
+            self.reload_current_page();
+            eprintln!("[REDO] Ripristinato stato successivo");
+        }
+    }
+
+    pub fn save_snapshot(&mut self) {
+        self.undo_stack.push(self.current_page_data.components.clone());
+        self.redo_stack.clear();
+    }
+
+    pub fn sync_components_to_db(&self) {
+        if let Some(conn) = &self.db {
+            let blob = crate::save_handler::db::encode_payload_list(&self.current_page_data.components);
+            let _ = conn.execute(
+                "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
+                rusqlite::params![self.current_page_id]
+            );
+            let _ = conn.execute(
+                "DELETE FROM active_components WHERE page_id = ?1",
+                rusqlite::params![self.current_page_id]
+            );
+            let _ = conn.execute(
+                "UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2",
+                rusqlite::params![blob, self.current_page_id]
+            );
         }
     }
 
