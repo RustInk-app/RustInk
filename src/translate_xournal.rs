@@ -46,11 +46,12 @@ pub struct XoppPage {
 
 pub fn import_xopp(path: &Path) -> Result<Vec<XoppPage>, XoppError> {
     let file = std::fs::File::open(path)?;
-    let mut gz = flate2::read::GzDecoder::new(file);
-    let mut xml = String::new();
-    gz.read_to_string(&mut xml)?;
-
-    parse_xopp_xml(&xml)
+    let gz = flate2::read::GzDecoder::new(file);
+    
+    // OTT. 1: Invece di caricare l'intero GZ in una String in RAM, passiamo 
+    // un buffer al parser per processare il file progressivamente (Streaming).
+    let reader = std::io::BufReader::new(gz);
+    parse_xopp_xml(reader)
 }
 
 #[derive(PartialEq)]
@@ -63,15 +64,14 @@ enum ParseState {
     InImage,
 }
 
-fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
+fn parse_xopp_xml<R: std::io::BufRead>(reader: R) -> Result<Vec<XoppPage>, XoppError> {
+    let mut xml_reader = Reader::from_reader(reader);
+    xml_reader.trim_text(true);
 
     let mut pages: Vec<XoppPage> = Vec::new();
     let mut state = ParseState::Root;
 
     // Dimensioni della pagina xopp corrente, per calcolare il fattore di scala
-    // verso il formato canonico RASTIN (PAGE_W x PAGE_H).
     let mut src_w: f64 = PAGE_W;
     let mut src_h: f64 = PAGE_H;
 
@@ -90,7 +90,7 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
     let mut buf = Vec::new();
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name().as_ref() {
                 b"page" => {
                     if state != ParseState::Root {
@@ -109,8 +109,6 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
                 }
                 b"stroke" if state == ParseState::InLayer => {
                     let tool = attr_str(e, b"tool").unwrap_or_default();
-                    // "highlighter" viene trattato come penna: non esiste ancora
-                    // un ComponentPayload dedicato per l'evidenziatore.
                     if tool == "pen" || tool == "highlighter" {
                         stroke_color = attr_str(e, b"color")
                             .map(|s| parse_xopp_color(&s))
@@ -133,13 +131,8 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
                     state = ParseState::InText;
                 }
                 b"image" if state == ParseState::InLayer => {
-                    // Il contenuto base64 arriva come testo dentro l'elemento,
-                    // ma lo gestiamo interamente qui sotto in Event::End per
-                    // avere già raccolto left/top/right/bottom.
                     text_x = attr_f64(e, b"left").unwrap_or(0.0);
                     text_y = attr_f64(e, b"top").unwrap_or(0.0);
-                    // Riuso text_size/text_color come scratch per right/bottom
-                    // sarebbe fuorviante: uso variabili dedicate qui sotto.
                     state = ParseState::InImage;
                     IMG_RIGHT.with(|c| *c.borrow_mut() = attr_f64(e, b"right").unwrap_or(text_x));
                     IMG_BOTTOM.with(|c| *c.borrow_mut() = attr_f64(e, b"bottom").unwrap_or(text_y));
@@ -178,12 +171,8 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
                             let scale = (sx + sy) / 2.0;
 
                             let text_font: String = "Sans".to_string();
-
                             let font_size_scaled = text_size * scale;
 
-                            // Xournal++ non salva una larghezza per il blocco di testo: la stimiamo
-                            // dalla riga più lunga (in caratteri) moltiplicata per una larghezza
-                            // media di carattere approssimata come 0.55 * font_size.
                             let longest_line = text_content
                                 .lines()
                                 .map(|l| l.chars().count())
@@ -199,13 +188,9 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
                                 spans: vec![TextSpan {
                                     text: text_content.clone(),
                                     style: TextStyle {
-                                        // xopp usa sempre font="Sans": non abbiamo un vero nome
-                                        // font da mappare, quindi teniamo il valore letto dall'attributo.
                                         font_family: text_font.clone(),
                                         size: font_size_scaled,
                                         color: text_color.clone(),
-                                        // Xournal++ non distingue bold/italic nell'elemento <text>:
-                                        // lo stile è sempre "regolare".
                                         bold: false,
                                         italic: false,
                                     },
@@ -268,8 +253,6 @@ fn parse_xopp_xml(xml: &str) -> Result<Vec<XoppPage>, XoppError> {
     Ok(pages)
 }
 
-// Scratch thread-local per left/top/right/bottom durante il parsing di <image>,
-// senza dover complicare la firma degli stati con altri campi dedicati.
 thread_local! {
     static IMG_RIGHT: std::cell::RefCell<f64> = std::cell::RefCell::new(0.0);
     static IMG_BOTTOM: std::cell::RefCell<f64> = std::cell::RefCell::new(0.0);
@@ -290,7 +273,6 @@ fn map_background_style(style: &str) -> PaperBackground {
     match style {
         "graph" => PaperBackground::Grid,
         "plain" => PaperBackground::Plain,
-        // "lined" / "ruled" / qualunque altro valore
         _ => PaperBackground::Ruled,
     }
 }
@@ -300,7 +282,6 @@ fn parse_xopp_color(s: &str) -> Color {
     let parse = |start: usize| -> f64 {
         u8::from_str_radix(s.get(start..start + 2).unwrap_or("00"), 16).unwrap_or(0) as f64 / 255.0
     };
-    // Il formato xopp è #RRGGBBAA: ignoriamo l'alpha, come già faceva il codice originale.
     Color::new(parse(0), parse(2), parse(4))
 }
 
@@ -337,10 +318,6 @@ fn build_stroke(text: &str, color: Color, width: f64, src_w: f64, src_h: f64) ->
     })
 }
 
-/// Decodifica l'immagine base64 inline di un elemento <image>, la ri-codifica
-/// in webp (per restare coerenti con la convenzione già usata da import_bundle
-/// / export_bundle_path, che filtrano solo file "*.webp" in media/) e la salva
-/// nella cartella media della sessione corrente.
 fn decode_and_save_image(
     base64_data: &str,
     left: f64,
@@ -350,9 +327,12 @@ fn decode_and_save_image(
     src_w: f64,
     src_h: f64,
 ) -> Result<ComponentPayload, XoppError> {
-    let clean: String = base64_data.chars().filter(|c| !c.is_whitespace()).collect();
+    
+    // OTT. 2: Sostituisce l'iteratore (che allocava in continuazione) con la funzione nativa di string replacement
+    let clean = base64_data.replace(|c: char| c.is_whitespace(), "");
+    
     let raw = base64::engine::general_purpose::STANDARD
-        .decode(clean)
+        .decode(&clean)
         .map_err(|e| XoppError::Image(format!("base64 non valido: {e}")))?;
 
     let decoded = image::load_from_memory(&raw)
@@ -364,11 +344,10 @@ fn decode_and_save_image(
     let fname = format!("{}.webp", uuid::Uuid::new_v4());
     let dest = media_dir.join(&fname);
 
-    let mut out = std::fs::File::create(&dest).map_err(XoppError::Io)?;
-    // Nota: l'encoder WebP di `image` è lossless; se il progetto usa altrove
-    // un encoder lossy (es. crate `webp` con libwebp), sostituire qui per coerenza.
+    // OTT. 3: Usiamo la funzione ad alto livello .save_with_format, come nel resto del programma.
+    // Delegare l'encoding alla libreria base evita colli di bottiglia causati dalla forzatura manuale del codec lossless puro.
     decoded
-        .write_with_encoder(image::codecs::webp::WebPEncoder::new_lossless(&mut out))
+        .save_with_format(&dest, image::ImageFormat::WebP)
         .map_err(|e| XoppError::Image(format!("encoding webp fallito: {e}")))?;
 
     let sx = PAGE_W / src_w;

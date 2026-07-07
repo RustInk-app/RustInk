@@ -199,8 +199,38 @@ pub(crate) fn setup_keyboard_shortcuts(
                         let iw = iw_orig * scale;
                         let ih = ih_orig * scale;
 
-                        let x = (crate::models::page::PAGE_W / 2.0 - iw / 2.0).max(0.0);
-                        let y = (crate::models::page::PAGE_H / 2.0 - ih / 2.0).max(0.0);
+                        // --- NUOVO: RECUPERO DEL CENTRO DINAMICO DELLA VIEWPORT ---
+                        let mut hadj = None;
+                        let mut vadj = None;
+                        let mut current_parent = canvas.parent();
+                        while let Some(widget) = current_parent {
+                            if let Ok(sw) = widget.clone().downcast::<gtk::ScrolledWindow>() {
+                                hadj = Some(sw.hadjustment());
+                                vadj = Some(sw.vadjustment());
+                                break;
+                            }
+                            current_parent = widget.parent();
+                        }
+
+                        // Calcola il centro dello schermo visibile convertendolo in coordinate del foglio
+                        let (px_center, py_center) = if let (Some(h), Some(v)) = (hadj, vadj) {
+                            let cx = h.value() + h.page_size() / 2.0;
+                            let cy = v.value() + v.page_size() / 2.0;
+                            let (ox, oy) = state.borrow().page_origin;
+                            let zoom = state.borrow().zoom;
+                            ((cx - ox) / zoom, (cy - oy) / zoom)
+                        } else {
+                            (crate::models::page::PAGE_W / 2.0, crate::models::page::PAGE_H / 2.0)
+                        };
+
+                        let mut x = px_center - iw / 2.0;
+                        let mut y = py_center - ih / 2.0;
+
+                        // --- GESTIONE DEI BORDI (Sopra/Sotto/Lati se manca spazio) ---
+                        if x + iw > crate::models::page::PAGE_W { x = crate::models::page::PAGE_W - iw; }
+                        if x < 0.0 { x = 0.0; }
+                        if y + ih > crate::models::page::PAGE_H { y = crate::models::page::PAGE_H - ih; }
+                        if y < 0.0 { y = 0.0; }
 
                         let block = crate::models::image::ImageBlock {
                             filename: bundle_entry,
@@ -217,9 +247,8 @@ pub(crate) fn setup_keyboard_shortcuts(
                 }
             }
 
-            // 2. Da qui in poi la logica è ESATTAMENTE quella che avevi già:
-            //    lavora solo su st.clipboard, sia che provenga da un Ctrl+C interno
-            //    sia che sia stata appena popolata al punto 1 con l'immagine esterna.
+            // 2. Da qui in poi la logica lavora su st.clipboard, sia che provenga
+            //    da un Ctrl+C interno sia da fonti esterne.
             let mut st = state.borrow_mut();
             if st.clipboard.is_empty() {
                 return Propagation::Proceed;
@@ -239,11 +268,12 @@ pub(crate) fn setup_keyboard_shortcuts(
                 if cy2 > max_y { max_y = cy2; }
             }
 
-            // 2b. Calcola l'offset standard
-            let mut offset_x = 20.0;
-            let mut offset_y = 20.0;
+            // 2b. Calcola l'offset standard: applichiamo +20px SOLO per copie interne,
+            // così l'immagine da clipboard esterna non subisce spostamenti indesiderati.
+            let mut offset_x = if internal_copy_active.get() { 20.0 } else { 0.0 };
+            let mut offset_y = if internal_copy_active.get() { 20.0 } else { 0.0 };
 
-            // 2c. Anti-uscita dai bordi
+            // 2c. Anti-uscita dai bordi finale (ulteriore livello di sicurezza)
             if max_x + offset_x > crate::models::page::PAGE_W { offset_x = crate::models::page::PAGE_W - max_x; }
             if max_y + offset_y > crate::models::page::PAGE_H { offset_y = crate::models::page::PAGE_H - max_y; }
             if min_x + offset_x < 0.0 { offset_x = -min_x; }
@@ -282,18 +312,23 @@ pub(crate) fn setup_keyboard_shortcuts(
                 new_elements.push(comp.clone());
             }
 
-            // 2e. Inserimento nel DB e nello stack
+            // 2e. Inserimento nel DB e nello stack degli snapshot (Undo funzionante)
             let start_idx = st.current_page_data.components.len();
             
             st.save_snapshot();
 
             for comp in new_elements {
-                st.commit_component(comp);
+                if let Some(conn) = &st.db {
+                    let _ = crate::save_handler::db::append_active_component(conn, st.current_page_id, &comp);
+                }
+                st.current_page_data.components.push(comp);
             }
 
             let end_idx = st.current_page_data.components.len();
+            st.thumbnail_cache.borrow_mut().remove(&st.current_page);
+            st.is_modified = true;
 
-            // 2f. Aggiorna la selezione
+            // 2f. Aggiorna la selezione sul nuovo elemento incollato
             st.selected_indices = (start_idx..end_idx).collect();
             if end_idx - start_idx == 1 {
                 st.selected_index = Some(start_idx);
