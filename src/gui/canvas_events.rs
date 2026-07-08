@@ -90,6 +90,35 @@ pub(crate) fn setup_canvas_events(
             return Propagation::Proceed;
         }
 
+        if event.event_type() == gdk::EventType::DoubleButtonPress {
+            let mut st = state.borrow_mut();
+            if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
+                if let ComponentPayload::RichText(ref block) = st.current_page_data.components[idx] {
+                    // Estrai il testo e lo stile originale
+                    let existing_text = block.spans.iter().map(|s| s.text.clone()).collect::<String>();
+                    let existing_style = block.spans.first().map(|s| s.style.clone()).unwrap_or_default();
+                    
+                    drop(st); // Rilascia il borrow per permettere l'apertura del modale!
+                    
+                    // Riapri il menù col testo esistente
+                    if let Some((new_text, new_style)) = crate::models::textbox::show_text_input_dialog(&w, &existing_style, &existing_text) {
+                        let mut st_mut = state.borrow_mut();
+                        st_mut.save_snapshot(); // Salva undo
+                        if let ComponentPayload::RichText(ref mut b) = st_mut.current_page_data.components[idx] {
+                            // Sostituisci il blocco testo con quello nuovo modificato
+                            b.spans = vec![TextSpan { text: new_text, style: new_style }];
+                        }
+                        st_mut.is_modified = true;
+                        let title = st_mut.window_title();
+                        drop(st_mut);
+                        w.set_title(&title);
+                        c.queue_draw();
+                    }
+                    return Propagation::Stop; // Ferma il flusso del click standard
+                }
+            }
+        }
+
         match tool 
         {
             
@@ -118,7 +147,7 @@ pub(crate) fn setup_canvas_events(
                 
                 let default_style = s.borrow().current_text_style.clone();
                 
-                if let Some((text, style)) = show_text_input_dialog(&w, &default_style) {
+                if let Some((text, style)) = show_text_input_dialog(&w, &default_style, "") {
                     let mut st = s.borrow_mut();
                     st.current_text_style = style.clone();
                     st.text_id_counter += 1;

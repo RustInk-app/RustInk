@@ -150,6 +150,7 @@ pub fn render_rich_text_block(
 pub fn show_text_input_dialog(
     parent:        &gtk::Window,
     default_style: &TextStyle,
+    initial_text: &str
 ) -> Option<(String, TextStyle)> {
  
     
@@ -313,6 +314,11 @@ pub fn show_text_input_dialog(
     text_view.set_bottom_margin(4);
     text_view.set_accepts_tab(false); 
  
+    text_view.set_accepts_tab(true);
+    
+    if !initial_text.is_empty() {
+        text_view.buffer().unwrap().set_text(initial_text);
+    }
     
     {
         let dlg = dialog.clone();
@@ -354,7 +360,7 @@ pub fn show_text_input_dialog(
             &buffer.start_iter(),
             &buffer.end_iter(),
             false,
-        ).map(|s| s.to_string().replace('\n', " ")).unwrap_or_default();
+        ).map(|s| s.to_string()).unwrap_or_default();
  
         if text.trim().is_empty() {
             None

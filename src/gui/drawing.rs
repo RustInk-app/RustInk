@@ -5,11 +5,10 @@ use crate::models::stroke::*;
 use crate::models::select::*;
 
 use crate::gui::state::*;
+use glib::{Propagation, ControlFlow, clone};
 
 use gtk::prelude::*;
 use gtk::cairo;
-
-use glib::Propagation;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -262,7 +261,10 @@ pub fn draw_pdf_background(
 }
 
 pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppState>>) {
+    
     let s = state.clone();
+    let last_size = Rc::new(RefCell::new((0, 0)));
+
     canvas.connect_draw(move |widget, cr| {
         let alloc = widget.allocation();
         let w = alloc.width() as f64;
@@ -338,11 +340,22 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
 
         cr.restore().ok();
 
-        
-        // Sostituisci le vecchie righe del set_size_request con queste:
         let needed_h = (page_h_zoomed + margin * 2.0) as i32;
         let needed_w = (page_w_zoomed + margin * 2.0) as i32;
-        widget.set_size_request(needed_w, needed_h);
+        
+        let mut last = last_size.borrow_mut();
+        
+        // Richiediamo a GTK di aggiornare le scrollbar SOLO se la dimensione è fisicamente cambiata
+        if last.0 != needed_w || last.1 != needed_h {
+            *last = (needed_w, needed_h);
+            
+            // glib::idle_add_local dice a GTK: "Appena hai finito di renderizzare questo fotogramma 
+            // e sei a riposo, aggiorna le dimensioni". Questo spezza il loop!
+            glib::idle_add_local(clone!(@weak widget => @default-return ControlFlow::Break, move || {
+                widget.set_size_request(needed_w, needed_h);
+                ControlFlow::Break
+            }));
+        }
 
         Propagation::Proceed
     });
