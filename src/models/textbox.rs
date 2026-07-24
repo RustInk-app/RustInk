@@ -1,4 +1,4 @@
-use crate::color;
+use crate::models::color;
 
 use serde::{Serialize, Deserialize};
 

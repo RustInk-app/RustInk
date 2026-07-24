@@ -1,8 +1,8 @@
-use crate::image;
-use crate::stroke;
-use crate::textbox;
+use crate::models::image;
+use crate::models::stroke;
+use crate::models::textbox;
+use crate::models::color;
 
-use crate::color;
 use gtk::cairo;
 
 use serde::{Serialize, Deserialize};

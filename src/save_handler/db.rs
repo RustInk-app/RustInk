@@ -1,3 +1,14 @@
+/*
+    ######################################################
+    # The format is nothing more than SQLITE3 tables, and 
+    # the main data is encrypted with bincode. This is 
+    # preferable because, with text files like JSON or 
+    # XML, it would create situations too complicated for 
+    # the machine to handle, and it's faster to have the 
+    # information in bytes rather than in text.
+    ######################################################
+*/
+
 use std::io::{self, Read, Write};
 use std::path::Path;
 
@@ -5,11 +16,13 @@ use rusqlite::{Connection, params};
 use zip::ZipArchive;
 use zip::write::{SimpleFileOptions, ZipWriter};
 
-use crate::page::*;
+use crate::models::page::*;
 
-use crate::save_handler::autosave;
+use crate::save_handler::autosave_utilities::*;
 
 const DB_ENTRY: &str = "struttura.sqlite";
+
+// They encode/decode objects into bytes that we will then save in our format
 
 pub fn encode_payload(payload: &ComponentPayload) -> Vec<u8> {
     bincode::serialize(payload).expect("bincode serialize ComponentPayload")
@@ -27,13 +40,65 @@ pub fn decode_payload_list(bytes: &[u8]) -> io::Result<Vec<ComponentPayload>> {
     bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
+/*
+    This is the basis of our format
+*/
+pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        PRAGMA synchronous   = NORMAL;
+        PRAGMA foreign_keys  = ON;
+
+        CREATE TABLE IF NOT EXISTS pages (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            display_order INTEGER NOT NULL,
+            background    INTEGER NOT NULL DEFAULT 0,
+            is_bookmarked INTEGER NOT NULL DEFAULT 0,
+            bookmark_name TEXT,
+            pdf_doc_id INTEGER,
+            pdf_page_index INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS pdf_documents (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            relative_path   TEXT NOT NULL,  
+            original_name   TEXT NOT NULL,
+            page_count      INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS base_layers (
+            page_id    INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+            baked_blob BLOB NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS active_components (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            page_id   INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            payload   BLOB    NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ac_page ON active_components(page_id, is_active);
+        CREATE VIRTUAL TABLE IF NOT EXISTS component_rtree USING rtree(id, minX, maxX, minY, maxY);
+    ",
+    )?;
+
+    Ok(())
+}
+
+/*
+    According to the element we have, when we select we need to 
+    create a correct selection box according to what we have and 
+    this function calculates it
+*/
 pub fn bounding_box(payload: &ComponentPayload) -> (f64, f64, f64, f64) {
     match payload {
         ComponentPayload::PenStroke(stroke) | ComponentPayload::EraserStroke(stroke) => {
             if stroke.points.is_empty() {
                 return (0.0, 0.0, 0.0, 0.0);
             }
-            let half_w = stroke.width / 2.0;
+            let half_w = (stroke.width / 2.0).abs();
             let mut min_x = f64::MAX;
             let mut max_x = f64::MIN;
             let mut min_y = f64::MAX;
@@ -69,7 +134,7 @@ pub fn bounding_box(payload: &ComponentPayload) -> (f64, f64, f64, f64) {
             (block.x, block.x + w, block.y, block.y + h)
         }
         ComponentPayload::Shape(block) => {
-            let half_w = block.width / 2.0;
+            let half_w = (block.width / 2.0).abs();
             (
                 block.x1.min(block.x2) - half_w,
                 block.x1.max(block.x2) + half_w,
@@ -80,281 +145,13 @@ pub fn bounding_box(payload: &ComponentPayload) -> (f64, f64, f64, f64) {
     }
 }
 
-pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous   = NORMAL;
-        PRAGMA foreign_keys  = ON;
-
-        CREATE TABLE IF NOT EXISTS pages (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            display_order INTEGER NOT NULL,
-            created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-            background    INTEGER NOT NULL DEFAULT 0,
-            is_bookmarked INTEGER NOT NULL DEFAULT 0,
-            bookmark_name TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS pdf_documents (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            relative_path   TEXT NOT NULL,  
-            original_name   TEXT NOT NULL,
-            page_count      INTEGER NOT NULL,
-            imported_at     INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS base_layers (
-            page_id    INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
-            baked_blob BLOB NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS active_components (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            page_id   INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            payload   BLOB    NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_ac_page ON active_components(page_id, is_active);
-        CREATE VIRTUAL TABLE IF NOT EXISTS component_rtree USING rtree(id, minX, maxX, minY, maxY);
-    ",
-    )?;
-
-    migrate_add_pdf_columns(conn)?;
-
-    // Fallback sicuro per aggiungere le colonne se il database esisteva già in precedenza
-    let _ = conn.execute("ALTER TABLE pages ADD COLUMN is_bookmarked INTEGER NOT NULL DEFAULT 0", []);
-    let _ = conn.execute("ALTER TABLE pages ADD COLUMN bookmark_name TEXT", []);
-
-    Ok(())
+pub fn load_page(conn: &Connection, page_id: i64) -> rusqlite::Result<PageData> {
+    load_page_full(conn, page_id).map(|(pd, _)| pd)
 }
 
-fn migrate_add_pdf_columns(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
-    let mut stmt = conn.prepare("PRAGMA table_info(pages)")?;
-    let existing_cols: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .filter_map(|r| r.ok())
-        .collect();
-    drop(stmt);
-
-    if !existing_cols.iter().any(|c| c == "pdf_doc_id") {
-        eprintln!("[MIGRATE] Aggiungo colonna pdf_doc_id a pages");
-        conn.execute("ALTER TABLE pages ADD COLUMN pdf_doc_id INTEGER", [])?;
-    }
-    if !existing_cols.iter().any(|c| c == "pdf_page_index") {
-        eprintln!("[MIGRATE] Aggiungo colonna pdf_page_index a pages");
-        conn.execute("ALTER TABLE pages ADD COLUMN pdf_page_index INTEGER", [])?;
-    }
-    Ok(())
-}
-
-#[derive(Clone, Debug)]
-pub struct PdfDocumentRow {
-    pub relative_path: String,
-}
-
-pub fn insert_pdf_document(
-    conn: &rusqlite::Connection,
-    relative_path: &str,
-    original_name: &str,
-    page_count: i64,
-) -> rusqlite::Result<i64> {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-
-    conn.execute(
-        "INSERT INTO pdf_documents (relative_path, original_name, page_count, imported_at)
-         VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![relative_path, original_name, page_count, ts],
-    )?;
-    Ok(conn.last_insert_rowid())
-}
-
-pub fn get_pdf_document(conn: &rusqlite::Connection, id: i64) -> rusqlite::Result<PdfDocumentRow> {
-    conn.query_row(
-        "SELECT id, relative_path, original_name, page_count FROM pdf_documents WHERE id = ?1",
-        [id],
-        |row| {
-            Ok(PdfDocumentRow {
-                relative_path: row.get(1)?,
-            })
-        },
-    )
-}
-
-/// Ritorna (pdf_doc_id, pdf_page_index) per una pagina, se presente.
-/// NULL-safe: le pagine vecchie (o non-PDF) ritornano Ok(None) invece di errore.
-pub fn get_page_pdf_ref(
-    conn: &rusqlite::Connection,
-    page_id: i64,
-) -> rusqlite::Result<Option<(i64, i64)>> {
-    conn.query_row(
-        "SELECT pdf_doc_id, pdf_page_index FROM pages WHERE id = ?1",
-        [page_id],
-        |row| {
-            let doc_id: Option<i64> = row.get(0)?;
-            let page_idx: Option<i64> = row.get(1)?;
-            Ok(doc_id.zip(page_idx))
-        },
-    )
-}
-
-pub fn ensure_pdf_schema(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS pdf_documents (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            relative_path   TEXT NOT NULL,
-            original_name   TEXT NOT NULL,
-            page_count      INTEGER NOT NULL,
-            imported_at     INTEGER NOT NULL
-        )",
-        [],
-    )?;
-    migrate_add_pdf_columns(conn)
-}
-
-pub fn update_page_background(
-    conn: &Connection,
-    page_id: i64,
-    bg: &PaperBackground,
-) -> rusqlite::Result<()> {
-    let bg_int = match bg {
-        PaperBackground::Ruled => 0,
-        PaperBackground::Plain => 1,
-        PaperBackground::Grid => 2,
-    };
-    conn.execute(
-        "UPDATE pages SET background = ?1 WHERE id = ?2",
-        params![bg_int, page_id],
-    )?;
-    Ok(())
-}
-
-pub fn page_count(conn: &Connection) -> rusqlite::Result<usize> {
-    conn.query_row("SELECT COUNT(*) FROM pages", [], |r| r.get::<_, i64>(0))
-        .map(|n| n as usize)
-}
-
-pub fn page_id_at(conn: &Connection, order_index: usize) -> rusqlite::Result<i64> {
-    conn.query_row(
-        "SELECT id FROM pages ORDER BY display_order ASC LIMIT 1 OFFSET ?1",
-        params![order_index as i64],
-        |r| r.get(0),
-    )
-}
-
-pub fn insert_page_after(
-    conn: &Connection,
-    after_order: usize,
-    bg: &PaperBackground,
-) -> rusqlite::Result<i64> {
-    let bg_int = match bg {
-        PaperBackground::Ruled => 0,
-        PaperBackground::Plain => 1,
-        PaperBackground::Grid => 2,
-    };
-    conn.execute(
-        "UPDATE pages SET display_order = display_order + 1 WHERE display_order > ?1",
-        params![after_order as i64],
-    )?;
-    conn.execute(
-        "INSERT INTO pages (display_order, background) VALUES (?1, ?2)",
-        params![(after_order + 1) as i64, bg_int],
-    )?;
-    let new_id = conn.last_insert_rowid();
-    conn.execute(
-        "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)",
-        params![new_id, encode_payload_list(&[])],
-    )?;
-    Ok(new_id)
-}
-
-pub fn insert_page_before(
-    conn: &Connection,
-    before_order: usize,
-    bg: &PaperBackground,
-) -> rusqlite::Result<i64> {
-    let bg_int = match bg {
-        PaperBackground::Ruled => 0,
-        PaperBackground::Plain => 1,
-        PaperBackground::Grid => 2,
-    };
-    conn.execute(
-        "UPDATE pages SET display_order = display_order + 1 WHERE display_order >= ?1",
-        params![before_order as i64],
-    )?;
-    conn.execute(
-        "INSERT INTO pages (display_order, background) VALUES (?1, ?2)",
-        params![before_order as i64, bg_int],
-    )?;
-    let new_id = conn.last_insert_rowid();
-    conn.execute(
-        "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)",
-        params![new_id, encode_payload_list(&[])],
-    )?;
-    Ok(new_id)
-}
-
-pub fn delete_page(conn: &Connection, page_id: i64) -> rusqlite::Result<()> {
-    conn.execute(
-        "DELETE FROM component_rtree
-         WHERE id IN (
-             SELECT id FROM active_components WHERE page_id = ?1
-         )",
-        params![page_id],
-    )?;
-
-    let order: i64 = conn.query_row(
-        "SELECT display_order FROM pages WHERE id = ?1",
-        params![page_id],
-        |r| r.get(0),
-    )?;
-    conn.execute("DELETE FROM pages WHERE id = ?1", params![page_id])?;
-    conn.execute(
-        "UPDATE pages SET display_order = display_order - 1 WHERE display_order > ?1",
-        params![order],
-    )?;
-    Ok(())
-}
-
-pub fn append_active_component(
-    conn: &Connection,
-    page_id: i64,
-    payload: &ComponentPayload,
-) -> rusqlite::Result<i64> {
-    let bytes = encode_payload(payload);
-
-    conn.execute(
-        "INSERT INTO active_components (page_id, is_active, payload) VALUES (?1, 1, ?2)",
-        params![page_id, bytes],
-    )?;
-    let new_id = conn.last_insert_rowid();
-
-    let (min_x, max_x, min_y, max_y) = bounding_box(payload);
-    conn.execute(
-        "INSERT INTO component_rtree (id, minX, maxX, minY, maxY)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![new_id, min_x, max_x, min_y, max_y],
-    )?;
-
-    Ok(new_id)
-}
-
-pub fn toggle_active_state(
-    conn: &Connection,
-    component_id: i64,
-    is_active: bool,
-) -> rusqlite::Result<()> {
-    conn.execute(
-        "UPDATE active_components SET is_active = ?1 WHERE id = ?2",
-        params![is_active as i64, component_id],
-    )?;
-    Ok(())
-}
-
+/*
+    I extract all the contents of the pages
+*/
 pub fn load_page_full(
     conn: &Connection,
     page_id: i64,
@@ -424,86 +221,12 @@ pub fn load_page_full(
     ))
 }
 
-pub fn update_bookmark_status(conn: &Connection, page_id: i64, is_bookmarked: bool, name: Option<&str>) -> rusqlite::Result<()> {
-    conn.execute(
-        "UPDATE pages SET is_bookmarked = ?1, bookmark_name = ?2 WHERE id = ?3",
-        params![is_bookmarked as i64, name, page_id],
-    )?;
-    Ok(())
-}
+// Medias
 
-pub fn load_page(conn: &Connection, page_id: i64) -> rusqlite::Result<PageData> {
-    load_page_full(conn, page_id).map(|(pd, _)| pd)
-}
-
-pub fn get_active_referenced_media(
-    conn: &Connection,
-) -> rusqlite::Result<std::collections::HashSet<String>> {
-    let mut media = std::collections::HashSet::new();
-
-    let mut stmt = conn.prepare("SELECT baked_blob FROM base_layers")?;
-    let baked_iter = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
-    for blob in baked_iter.flatten() {
-        if let Ok(components) = decode_payload_list(&blob) {
-            for comp in components {
-                if let ComponentPayload::Image(block) = comp {
-                    media.insert(block.filename.clone());
-                }
-            }
-        }
-    }
-
-    let mut stmt = conn.prepare("SELECT payload FROM active_components WHERE is_active = 1")?;
-    let active_iter = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
-    for blob in active_iter.flatten() {
-        if let Ok(comp) = decode_payload(&blob) {
-            if let ComponentPayload::Image(block) = comp {
-                media.insert(block.filename.clone());
-            }
-        }
-    }
-
-    Ok(media)
-}
-
-pub fn move_page(conn: &Connection, page_id: i64, new_order: usize) -> rusqlite::Result<()> {
-    let old_order: i64 = conn.query_row(
-        "SELECT display_order FROM pages WHERE id = ?1",
-        params![page_id],
-        |r| r.get(0),
-    )?;
-
-    let new_ord = new_order as i64;
-    if old_order == new_ord {
-        return Ok(());
-    }
-
-    if old_order < new_ord {
-        conn.execute(
-            "UPDATE pages SET display_order = display_order - 1 
-             WHERE display_order > ?1 AND display_order <= ?2",
-            params![old_order, new_ord],
-        )?;
-    } else {
-        conn.execute(
-            "UPDATE pages SET display_order = display_order + 1 
-             WHERE display_order >= ?1 AND display_order < ?2",
-            params![new_ord, old_order],
-        )?;
-    }
-
-    conn.execute(
-        "UPDATE pages SET display_order = ?1 WHERE id = ?2",
-        params![new_ord, page_id],
-    )?;
-
-    Ok(())
-}
-
-pub fn export_bundle_path(db_path: &Path, bundle_path: &Path) -> io::Result<()> {
+pub fn export_medias(db_path: &Path, bundle_path: &Path) -> io::Result<()> {
     let db_bytes = std::fs::read(db_path)?;
     eprintln!(
-        "[DB] export_bundle_path: {} byte da {:?}",
+        "[DB] export_medias: {} byte da {:?}",
         db_bytes.len(),
         db_path
     );
@@ -524,7 +247,7 @@ pub fn export_bundle_path(db_path: &Path, bundle_path: &Path) -> io::Result<()> 
         }
     }
 
-    if let Ok(entries) = std::fs::read_dir(&autosave::media_dir()) {
+    if let Ok(entries) = std::fs::read_dir(&media_dir()) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("webp") {
@@ -552,7 +275,7 @@ pub fn export_bundle_path(db_path: &Path, bundle_path: &Path) -> io::Result<()> 
     Ok(())
 }
 
-pub fn import_bundle(bundle_path: &Path, dest_path: &Path) -> io::Result<()> {
+pub fn import_medias(bundle_path: &Path, dest_path: &Path) -> io::Result<()> {
     let file = std::fs::File::open(bundle_path)?;
     let mut zip =
         ZipArchive::new(file).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -566,7 +289,7 @@ pub fn import_bundle(bundle_path: &Path, dest_path: &Path) -> io::Result<()> {
         std::fs::write(dest_path, buf)?;
     }
 
-    let media_tmp = autosave::media_dir();
+    let media_tmp = media_dir();
 
     let _ = std::fs::remove_dir_all(&media_tmp);
 
@@ -599,55 +322,32 @@ pub fn import_bundle(bundle_path: &Path, dest_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-// Aggiungi questo in fondo a src/save_handler/db.rs
+pub fn get_active_referenced_media(
+    conn: &Connection,
+) -> rusqlite::Result<std::collections::HashSet<String>> {
+    let mut media = std::collections::HashSet::new();
 
-/// Inserisce massivamente tutte le pagine di un PDF usando una Transazione
-/// e dei Prepared Statements per garantire prestazioni istantanee.
-pub fn insert_pdf_backed_pages_bulk(
-    conn: &mut rusqlite::Connection, // Deve essere mutabile per avviare una transazione
-    start_order: i64,
-    pdf_doc_id: i64,
-    n_pages: usize,
-) -> rusqlite::Result<i64> {
-    // 1. Avvia la transazione. Tutti gli insert avverranno in memoria (RAM)
-    // e verranno scritti su disco solo al momento del commit.
-    let tx = conn.transaction()?;
-
-    let mut first_new_id = 0;
-
-    // 2. Pre-calcoliamo il blob vuoto una volta sola per non serializzarlo ad ogni ciclo
-    let empty_blob = encode_payload_list(&[]);
-
-    {
-        // 3. Prepariamo gli statement SQL fuori dal ciclo.
-        // Questo evita che SQLite debba ri-compilare la query ad ogni iterazione.
-        let mut stmt_page = tx.prepare(
-            "INSERT INTO pages (display_order, pdf_doc_id, pdf_page_index) VALUES (?1, ?2, ?3)"
-        )?;
-        let mut stmt_layer = tx.prepare(
-            "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)"
-        )?;
-
-        // 4. Eseguiamo il ciclo ad altissima velocità
-        for i in 0..n_pages {
-            let display_order = start_order + i as i64;
-            let pdf_page_index = i as i64;
-
-            stmt_page.execute(rusqlite::params![display_order, pdf_doc_id, pdf_page_index])?;
-
-            // Recupera l'ID appena generato
-            let page_id = tx.last_insert_rowid();
-
-            if i == 0 {
-                first_new_id = page_id;
+    let mut stmt = conn.prepare("SELECT baked_blob FROM base_layers")?;
+    let baked_iter = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
+    for blob in baked_iter.flatten() {
+        if let Ok(components) = decode_payload_list(&blob) {
+            for comp in components {
+                if let ComponentPayload::Image(block) = comp {
+                    media.insert(block.filename.clone());
+                }
             }
-
-            stmt_layer.execute(rusqlite::params![page_id, &empty_blob])?;
         }
-    } // I prepared statement vengono scartati qui per liberare la transazione
+    }
 
-    // 5. Scrive fisicamente tutto su disco in un'unica singola operazione
-    tx.commit()?;
+    let mut stmt = conn.prepare("SELECT payload FROM active_components WHERE is_active = 1")?;
+    let active_iter = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
+    for blob in active_iter.flatten() {
+        if let Ok(comp) = decode_payload(&blob) {
+            if let ComponentPayload::Image(block) = comp {
+                media.insert(block.filename.clone());
+            }
+        }
+    }
 
-    Ok(first_new_id)
+    Ok(media)
 }

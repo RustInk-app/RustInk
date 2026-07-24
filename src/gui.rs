@@ -1,3 +1,13 @@
+/*
+
+######################################################
+# The menu is set up here. All glade menu buttons are 
+# connected to events and a check is made to see if any 
+# files need to be retrieved.
+######################################################
+
+*/ 
+
 pub mod canvas_events;
 pub mod drawing;
 pub mod file_ops;
@@ -12,10 +22,14 @@ use gtk::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
 use crate::save_handler::autosave::*;
+use crate::save_handler::autosave_utilities::*;
+
 use crate::save_handler::db::*;
 
-use crate::check_recovery;
+use crate::save_handler::autosave::*;
 
 use crate::gui::canvas_events::*;
 use crate::gui::drawing::*;
@@ -37,13 +51,12 @@ pub fn build_ui(app: &gtk::Application) {
     {
         Some((backup_path, original_bundle)) => {
             let tmp = temp_db_dir();
-            let recovered = import_bundle(&backup_path, &tmp)
+            let recovered = import_medias(&backup_path, &tmp)
                 .map_err(|e| e.to_string())
                 .and_then(|_| rusqlite::Connection::open(&tmp).map_err(|e| e.to_string()));
 
             match recovered {
                 Ok(conn) => {
-                    let _ = crate::save_handler::db::ensure_pdf_schema(&conn); 
                     let count = page_count(&conn).unwrap_or(1);
                     let first_id = page_id_at(&conn, 0).unwrap_or(1);
                     let first_page = load_page(&conn, first_id).unwrap_or_default();
@@ -346,7 +359,7 @@ fn setup_menus(
                 st.current_page_data.background = bg_type.clone();
                 st.is_modified = true;
                 if let Some(conn) = &st.db {
-                    let _ = crate::save_handler::db::update_page_background(
+                    let _ = update_page_background(
                         conn,
                         st.current_page_id,
                         &bg_type,

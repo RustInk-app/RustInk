@@ -1,5 +1,5 @@
-use crate::color;
-use crate::page;
+use crate::models::color;
+use crate::models::page;
 
 use gtk::cairo;
 

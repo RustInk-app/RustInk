@@ -4,6 +4,8 @@ use crate::translate_xournal::*;
 
 use crate::save_handler::autosave;
 use crate::save_handler::db::*;
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
 
 use crate::gui::sidebar::*;
 use crate::gui::state::*;
@@ -17,7 +19,9 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::save_handler::autosave::docs_dir;
+use crate::save_handler::autosave::*;
+use crate::save_handler::autosave_utilities::*;
+
 use std::path::Path;
 
 pub fn import_pdf_background(
@@ -52,13 +56,17 @@ pub fn import_pdf_background(
 
     // 3. Scrittura ottimizzata all'interno del Database
     let mut conn = rusqlite::Connection::open(db_tmp_path).map_err(|e| e.to_string())?;
-    crate::save_handler::db::ensure_pdf_schema(&conn).map_err(|e| e.to_string())?;
 
-    let doc_id = crate::save_handler::db::insert_pdf_document(&conn, &relative_path, &original_name, n_pages as i64)
-        .map_err(|e| e.to_string())?;
+    let _ = conn.execute(
+        "INSERT INTO pdf_documents (relative_path, original_name, page_count)
+        VALUES (?1, ?2, ?3)",
+        rusqlite::params![&relative_path, &original_name, n_pages as i64],
+    );
+
+    let doc_id = conn.last_insert_rowid();
 
     // Inserimento bulk istantaneo tramite transazione
-    let first_id = crate::save_handler::db::insert_pdf_backed_pages_bulk(
+    let first_id = insert_pdf_backed_pages_bulk(
         &mut conn,
         start_order,
         doc_id,
@@ -323,7 +331,7 @@ pub(crate) fn setup_file_ops(
         let path_clone = target_path.clone();
 
         std::thread::spawn(move || {
-            let result = export_bundle_path(&tmp_path, &path_clone).map_err(|e| e.to_string());
+            let result = export_medias(&tmp_path, &path_clone).map_err(|e| e.to_string());
             let _ = tx.send(result);
         });
 
@@ -345,8 +353,8 @@ pub(crate) fn setup_file_ops(
                         let title = st.window_title();
                         drop(st);
                         w_clone.set_title(&title);
-                        autosave::clear_old_sessions();
-                        autosave::write_autosave_sentinel(Some(&target_path));
+                        clear_old_sessions();
+                        write_autosave_sentinel(Some(&target_path));
                     } else if let Err(e) = result {
                         eprintln!("[DB] ERRORE salvataggio: {e}");
                     }
@@ -395,10 +403,10 @@ pub(crate) fn setup_file_ops(
                     if let Some(path) = path_opt {
                         if let Some(tmp) = state.borrow().db_tmp_path.clone() {
                             { let st = state.borrow(); if let Some(conn) = &st.db { let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);"); } }
-                            if export_bundle_path(&tmp, &path).is_ok() {
+                            if export_medias(&tmp, &path).is_ok() {
                                 state.borrow_mut().bundle_path = Some(path.clone());
                                 state.borrow_mut().is_modified = false;
-                                autosave::write_autosave_sentinel(Some(&path));
+                                write_autosave_sentinel(Some(&path));
                                 return true;
                             }
                         }
@@ -543,7 +551,7 @@ pub(crate) fn setup_file_ops(
             st.redo_stack.clear();
         }
 
-        let tmp = autosave::temp_db_dir();
+        let tmp = temp_db_dir();
         let loading = show_loading_dialog(&window, "Apertura documento in corso…");
 
         pub struct OpenResult {
@@ -587,7 +595,7 @@ pub(crate) fn setup_file_ops(
                     let first_page = load_page(&conn, first_id).map_err(|e| e.to_string())?;
                     Ok(OpenResult { page_count: count, first_id, first_page, conn, bundle_path: None, tmp })
                 } else {
-                    import_bundle(&chosen_clone, &tmp).map_err(|e| e.to_string())?;
+                    import_medias(&chosen_clone, &tmp).map_err(|e| e.to_string())?;
                     let conn = rusqlite::Connection::open(&tmp).map_err(|e| e.to_string())?;
 
                     // Se il worker delle miniature (o qualunque altra connessione residua sullo
@@ -616,7 +624,7 @@ pub(crate) fn setup_file_ops(
             match rx.try_recv() {
                 Ok(Ok(res)) => {
                     if let Some(ld) = lw.upgrade() { unsafe { ld.destroy(); } }
-                    autosave::write_autosave_sentinel(res.bundle_path.as_ref());
+                    write_autosave_sentinel(res.bundle_path.as_ref());
                     
                     let mut st = s_clone.borrow_mut();
                     st.page_count = res.page_count; 
@@ -732,19 +740,19 @@ pub(crate) fn setup_autosave(state: &Rc<RefCell<AppState>>) {
             (st.db_tmp_path.clone(), st.bundle_path.clone())
         };
         if let Some(tmp) = tmp_path {
-            let dest = autosave::autosave_path();
+            let dest = autosave_path();
             {
                 let st = s.borrow();
                 if let Some(conn) = &st.db {
                     let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
                 }
             }
-            std::thread::spawn(move || match export_bundle_path(&tmp, &dest) {
+            std::thread::spawn(move || match export_medias(&tmp, &dest) {
                 Ok(_) => eprintln!("[AUTOSAVE] Backup salvato in {:?}", dest),
                 Err(e) => eprintln!("[AUTOSAVE] Errore: {e}"),
             });
-            autosave::write_autosave_sentinel(bundle_path.as_ref());
-            let mut backups: Vec<PathBuf> = std::fs::read_dir(autosave::autosave_path())
+            write_autosave_sentinel(bundle_path.as_ref());
+            let mut backups: Vec<PathBuf> = std::fs::read_dir(autosave_path())
                 .into_iter()
                 .flatten()
                 .flatten()
@@ -825,7 +833,7 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
                                     let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
                                 }
                             }
-                            match export_bundle_path(&tmp, &path) {
+                            match export_medias(&tmp, &path) {
                                 Ok(_) => eprintln!("[CHIUSURA] Salvato in {:?}", path),
                                 Err(e) => eprintln!("[CHIUSURA] ERRORE salvataggio: {e}"),
                             }
@@ -837,7 +845,7 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
         }
         s.borrow_mut().release_lock();
 
-        if let Ok(entries) = std::fs::read_dir(autosave::backup_dir()) {
+        if let Ok(entries) = std::fs::read_dir(backup_dir()) {
             for entry in entries.flatten() {
                 let _ = std::fs::remove_file(entry.path());
             }

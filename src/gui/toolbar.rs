@@ -11,7 +11,9 @@ use crate::models::page::*;
 use crate::models::select::*;
 use crate::models::stroke::*;
 
-use crate::save_handler::db::{delete_page, insert_page_after, load_page, page_id_at};
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
+use crate::save_handler::db::*;
 
 pub(crate) fn setup_toolbar(
     builder: &gtk::Builder,
@@ -225,7 +227,7 @@ pub(crate) fn setup_toolbar(
 
                     if changed {
                         if let Some(conn) = &st.db {
-                            let blob = crate::save_handler::db::encode_payload_list(&st.current_page_data.components);
+                            let blob = encode_payload_list(&st.current_page_data.components);
                             let _ = conn.execute("DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)", rusqlite::params![st.current_page_id]);
                             let _ = conn.execute("DELETE FROM active_components WHERE page_id = ?1", rusqlite::params![st.current_page_id]);
                             let _ = conn.execute("UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2", rusqlite::params![blob, st.current_page_id]);
@@ -315,7 +317,7 @@ pub(crate) fn setup_toolbar(
 
                     if changed {
                         if let Some(conn) = &st.db {
-                            let blob = crate::save_handler::db::encode_payload_list(&st.current_page_data.components);
+                            let blob = encode_payload_list(&st.current_page_data.components);
                             let _ = conn.execute("DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)", rusqlite::params![st.current_page_id]);
                             let _ = conn.execute("DELETE FROM active_components WHERE page_id = ?1", rusqlite::params![st.current_page_id]);
                             let _ = conn.execute("UPDATE base_layers SET baked_blob = ?1 WHERE page_id = ?2", rusqlite::params![blob, st.current_page_id]);
@@ -482,7 +484,7 @@ pub(crate) fn setup_toolbar(
             }
 
             if let Some(conn) = &st.db {
-                let _ = crate::save_handler::db::update_bookmark_status(conn, page_id, is_active, custom_name.as_deref());
+                let _ = update_bookmark_status(conn, page_id, is_active, custom_name.as_deref());
             }
 
             st.rebuild_bookmark_index();

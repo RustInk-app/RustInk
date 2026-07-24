@@ -1,6 +1,8 @@
 use crate::models::page::*;
 use crate::models::select::*;
-use crate::save_handler::db::encode_payload_list;
+use crate::save_handler::db::*;
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
 
 use gtk::prelude::*;
 use gtk::gdk;
@@ -13,6 +15,8 @@ use std::rc::Rc;
 use crate::gui::state::*;
 use crate::models::image::*;
 use crate::save_handler::autosave::*;
+use crate::save_handler::autosave_utilities::*;
+
 
 use std::cell::Cell;
 
@@ -261,7 +265,7 @@ pub(crate) fn setup_keyboard_shortcuts(
             let mut max_y = f64::MIN;
 
             for comp in &st.clipboard {
-                let (cx1, cx2, cy1, cy2) = crate::save_handler::db::bounding_box(comp);
+                let (cx1, cx2, cy1, cy2) = bounding_box(comp);
                 if cx1 < min_x { min_x = cx1; }
                 if cy1 < min_y { min_y = cy1; }
                 if cx2 > max_x { max_x = cx2; }
@@ -319,7 +323,7 @@ pub(crate) fn setup_keyboard_shortcuts(
 
             for comp in new_elements {
                 if let Some(conn) = &st.db {
-                    let _ = crate::save_handler::db::append_active_component(conn, st.current_page_id, &comp);
+                    let _ = append_active_component(conn, st.current_page_id, &comp);
                 }
                 st.current_page_data.components.push(comp);
             }

@@ -1,17 +1,4 @@
-mod models;
-mod gui;
-mod save_handler;
-mod translate_xournal;
-mod export; 
-
-use crate::models::color;
-use crate::models::textbox;
-use crate::models::image;
-use crate::models::page;
-use crate::models::stroke;
-
-use crate::gui::build_ui;
-use crate::save_handler::autosave::*;
+use RASTIN::gui::build_ui;
 
 use gtk::prelude::*;
 use gtk::{Application};

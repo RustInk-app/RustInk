@@ -6,6 +6,8 @@ use crate::models::textbox::*;
 
 use crate::save_handler::autosave;
 use crate::save_handler::db::*;
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
 
 use gtk::cairo;
 use gtk::prelude::*;
@@ -13,6 +15,8 @@ use gtk::prelude::*;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+
+use crate::save_handler::autosave_utilities::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EventTrigger {
@@ -174,7 +178,7 @@ impl AppState {
 
     pub fn init_new_document(&mut self) -> rusqlite::Result<()> {
         
-        let tmp = autosave::temp_db_dir();
+        let tmp = temp_db_dir();
 
         let conn = rusqlite::Connection::open(&tmp)?;
 
@@ -183,8 +187,7 @@ impl AppState {
         conn.execute("INSERT INTO pages (display_order) VALUES (0)", [])?;
         let page_id = conn.last_insert_rowid();
 
-        let _ =
-            crate::save_handler::db::update_page_background(&conn, page_id, &PaperBackground::Grid);
+         let _ = update_page_background(&conn, page_id, &PaperBackground::Grid);
 
         conn.execute(
             "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)",
@@ -285,7 +288,7 @@ impl AppState {
         let Ok(row) = get_pdf_document(conn, doc_id) else { return };
 
         // Il path è relativo alla cartella di sessione (docs/<uuid>.pdf)
-        let full_path = crate::save_handler::autosave::SESSION_TEMP_DIR
+        let full_path = SESSION_TEMP_DIR
             .path()
             .join(&row.relative_path);
 
@@ -353,7 +356,7 @@ impl AppState {
 
     pub fn sync_components_to_db(&self) {
         if let Some(conn) = &self.db {
-            let blob = crate::save_handler::db::encode_payload_list(&self.current_page_data.components);
+            let blob = encode_payload_list(&self.current_page_data.components);
             let _ = conn.execute(
                 "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
                 rusqlite::params![self.current_page_id]

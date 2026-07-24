@@ -4,7 +4,9 @@ use gtk::cairo;
 
 use serde::{Serialize, Deserialize};
 
-use crate::save_handler::autosave;
+use crate::save_handler::autosave::*;
+use crate::save_handler::autosave_utilities::*;
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageBlock {
@@ -32,7 +34,7 @@ pub fn render_image_block(
 
     
     if !cache_mut.contains_key(&fname) {
-        let webp_path = autosave::media_dir().join(&fname);
+        let webp_path = media_dir().join(&fname);
         
         if let Ok(bytes) = std::fs::read(&webp_path) {
             if let Ok(img) = image::load_from_memory_with_format(&bytes, image::ImageFormat::WebP) {

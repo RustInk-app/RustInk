@@ -1,7 +1,22 @@
-// export.rs
+/*
+
+######################################################
+# Here's everything you need to know about exporting files. 
+# Specifically, there are two techniques for exporting 
+# files: the "classic" one (used for handwritten documents) 
+# and the PDF Injection one, which simply writes what we've 
+# done to a PDF, rather than redrawing the surface.
+######################################################
+
+*/ 
+
 use crate::models::page::*;
 use crate::save_handler::db::*;
-use crate::save_handler::autosave::SESSION_TEMP_DIR;
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
+use crate::save_handler::autosave::*;
+use crate::save_handler::autosave_utilities::*;
+
 
 use std::path::Path;
 use std::sync::mpsc::Sender;

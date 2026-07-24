@@ -7,6 +7,11 @@ use glib::Propagation;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::save_handler::database_pdf_utilities::*;
+use crate::save_handler::database_utilities::*;
+
+use crate::save_handler::autosave_utilities::*;
+
 lazy_static::lazy_static! {
     pub(crate) static ref DND_TARGETS: [gtk::TargetEntry; 1] = [
         gtk::TargetEntry::new("application/x-rastin-page", gtk::TargetFlags::SAME_APP, 0),
@@ -128,14 +133,14 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
                         }
 
                         if let Some(c) = &conn {
-                            if let Ok(page_id) = crate::save_handler::db::page_id_at(c, page_index) {
-                                if let Ok(page_data) = crate::save_handler::db::load_page(c, page_id) {
+                            if let Ok(page_id) = page_id_at(c, page_index) {
+                                if let Ok(page_data) = load_page(c, page_id) {
                                     
-                                    let pdf_bg_ref = if let Ok(Some((doc_id, pdf_idx))) = crate::save_handler::db::get_page_pdf_ref(c, page_id) {
+                                    let pdf_bg_ref = if let Ok(Some((doc_id, pdf_idx))) = get_page_pdf_ref(c, page_id) {
                                         // Usa la cache locale per non chiamare mai più from_file due volte!
                                         let doc = poppler_cache.entry(doc_id).or_insert_with(|| {
-                                            let row = crate::save_handler::db::get_pdf_document(c, doc_id).unwrap();
-                                            let full_path = crate::save_handler::autosave::SESSION_TEMP_DIR.path().join(&row.relative_path);
+                                            let row = get_pdf_document(c, doc_id).unwrap();
+                                            let full_path = SESSION_TEMP_DIR.path().join(&row.relative_path);
                                             let uri = gio::File::for_path(&full_path).uri();
                                             poppler::Document::from_file(&uri, None).unwrap()
                                         });

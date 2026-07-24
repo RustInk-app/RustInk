@@ -1,17 +1,28 @@
-// translate_xournal.rs
-use std::io::Read;
+/*
+
+######################################################
+# Xournal++'s MAIN function converter. 
+# This includes lines, text, images, and shapes.
+# Non sono (ancora) supportati i layer (ad esempio) 
+# oppure i tratti tratteggiati o in diversi stili
+######################################################
+
+*/ 
+
 use std::path::Path;
 
 use base64::Engine;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
-use crate::color::Color;
-use crate::page::{ComponentPayload, PaperBackground, PAGE_H, PAGE_W};
-use crate::textbox::{RichTextBlock, TextSpan, TextStyle};
-use crate::image::ImageBlock;
+use crate::models::color::Color;
+use crate::models::page::{ComponentPayload, PaperBackground, PAGE_H, PAGE_W};
+use crate::models::textbox::{RichTextBlock, TextSpan, TextStyle};
+use crate::models::image::ImageBlock;
 use crate::save_handler::autosave;
-use crate::stroke::Stroke;
+use crate::models::stroke::Stroke;
+use crate::save_handler::autosave::*;
+use crate::save_handler::autosave_utilities::*;
 
 #[derive(Debug)]
 pub enum XoppError {
@@ -338,7 +349,7 @@ fn decode_and_save_image(
     let decoded = image::load_from_memory(&raw)
         .map_err(|e| XoppError::Image(format!("formato immagine non supportato: {e}")))?;
 
-    let media_dir = autosave::media_dir();
+    let media_dir = media_dir();
     std::fs::create_dir_all(&media_dir).map_err(XoppError::Io)?;
 
     let fname = format!("{}.webp", uuid::Uuid::new_v4());
