@@ -25,3 +25,4 @@ poppler-rs = { version = "0.22", features = ["v20_9"] }
 uuid = { version = "1", features = ["v4"] }
 lopdf = "0.33.0"
 base64 = "0.22.1"
+rayon = "1.10"

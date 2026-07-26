@@ -6,3 +6,6 @@ mod eraser_tests;
 
 #[path = "save_tests/text_tests.rs"]
 mod text_tests;
+
+#[path = "save_tests/shape_tests.rs"]
+mod shape_tests;

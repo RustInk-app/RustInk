@@ -232,8 +232,9 @@ pub fn export_document_to_pdf(
         let count = page_count(&conn).map_err(|e| e.to_string())? as usize;
         if count == 0 { return Ok(()); }
 
-        let first_id = page_id_at(&conn, 0).map_err(|e| e.to_string())?;
-        let base_doc_id = get_page_pdf_ref(&conn, first_id).map_err(|e| e.to_string())?
+        let base_doc_id = (0..count)
+            .filter_map(|i| page_id_at(&conn, i).ok())
+            .find_map(|pid| get_page_pdf_ref(&conn, pid).ok().flatten())
             .map(|(doc_id, _)| doc_id);
 
         match base_doc_id {
@@ -315,7 +316,7 @@ fn render_components(
             }
             ComponentPayload::EraserStroke(_) => {}
             ComponentPayload::RichText(block) => {
-                crate::models::textbox::render_rich_text_block(cr, block, 0.0, 0.0);
+                crate::models::textbox::render_rich_text_block(cr, block, 0.0, 0.0, image_cache);
             }
             ComponentPayload::Shape(block) => {
                 crate::models::page::render_shape(cr, block, 0.0, 0.0);

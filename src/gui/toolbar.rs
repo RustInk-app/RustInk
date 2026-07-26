@@ -211,18 +211,29 @@ pub(crate) fn setup_toolbar(
                     st.current_color = c_clone.clone();
 
                     let indices = st.selected_indices.clone();
+                    let mut texts_to_invalidate = Vec::new(); // 1. Creiamo un contenitore temporaneo
+
                     for idx in indices {
                         if let Some(comp) = st.current_page_data.components.get_mut(idx) {
                             match comp {
                                 ComponentPayload::PenStroke(stroke) => { stroke.color = c_clone.clone(); changed = true; }
                                 ComponentPayload::Shape(shape) => { shape.color = c_clone.clone(); changed = true; }
-                                ComponentPayload::RichText(block) => { 
-                                    for span in &mut block.spans { span.style.color = c_clone.clone(); }
-                                    changed = true; 
+                                ComponentPayload::RichText(block) => {
+                                    for span in &mut block.spans { span.style.color = c_clone.clone(); } // o new_c.clone() nel custom
+                                    
+                                    // 2. Invece di toccare la cache qui, salviamo l'ID per dopo
+                                    texts_to_invalidate.push(format!("txt_{}", block.id_temporaneo));
+                                    changed = true;
                                 }
                                 _ => {}
                             }
                         }
+                    }
+
+                    // 3. Ora che il blocco 'match' è chiuso, Rust ha rilasciato il prestito mutabile!
+                    // Possiamo svuotare la cache in totale sicurezza.
+                    for id in texts_to_invalidate {
+                        st.image_cache.borrow_mut().remove(&id);
                     }
 
                     if changed {

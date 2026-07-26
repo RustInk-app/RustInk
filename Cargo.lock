@@ -22,6 +22,7 @@ dependencies = [
  "pangocairo",
  "poppler-rs",
  "quick-xml",
+ "rayon",
  "rusqlite",
  "serde",
  "tempfile",

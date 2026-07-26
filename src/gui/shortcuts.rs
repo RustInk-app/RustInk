@@ -134,11 +134,35 @@ pub(crate) fn setup_keyboard_shortcuts(
             }
 
             drop(st);
+
+            if let Some(ComponentPayload::Image(block)) = copied.iter().find(|c| matches!(c, ComponentPayload::Image(_))) {
+                let fname = std::path::Path::new(&block.filename)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                let webp_path = media_dir().join(&fname);
+
+                if let Ok(bytes) = std::fs::read(&webp_path) {
+                    if let Ok(img) = image::load_from_memory_with_format(&bytes, image::ImageFormat::WebP) {
+                        let img_rgba = img.to_rgba8();
+                        let (iw, ih) = (img_rgba.width() as i32, img_rgba.height() as i32);
+                        let pixbuf = gdk::gdk_pixbuf::Pixbuf::from_bytes(
+                            &glib::Bytes::from(img_rgba.as_raw().as_slice()),
+                            gdk::gdk_pixbuf::Colorspace::Rgb,
+                            true,   // has_alpha
+                            8,
+                            iw, ih,
+                            iw * 4, // rowstride
+                        );
+                        let gtk_clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
+                        gtk_clipboard.set_image(&pixbuf);
+                    }
+                }
+            }
+
             state.borrow_mut().clipboard = copied;
 
-            // Segnaliamo che l'ultima copia valida è quella INTERNA:
-            // il prossimo Ctrl+V deve ignorare la clipboard di sistema
-            // finché non arriva una vera copia esterna (owner-change).
             internal_copy_active.set(true);
 
             return Propagation::Stop;

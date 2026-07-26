@@ -73,77 +73,90 @@ pub fn render_rich_text_block(
     block: &RichTextBlock,
     ox:    f64,
     oy:    f64,
+    cache: &RefCell<std::collections::HashMap<String, cairo::ImageSurface>>
 ) {
-    
-    cr.move_to(ox + block.x + TEXT_PADDING, oy + block.y + TEXT_PADDING);
- 
-    
-    let layout = pangocairo::create_layout(cr);
-    
-    layout.set_width((block.width * pango::SCALE as f64) as i32);
-    layout.set_wrap(WrapMode::Word);
- 
-    
-    let mut full_text   = String::new();
-    let attr_list   = AttrList::new();
-    let mut byte_offset = 0u32;
- 
-    for span in &block.spans {
-        let start = byte_offset;
-        let end   = byte_offset + span.text.len() as u32;
- 
+    let mut cache_mut = cache.borrow_mut();
+    // Usiamo l'ID univoco del blocco come chiave di cache
+    let cache_key = format!("txt_{}", block.id_temporaneo);
+
+    // Se l'immagine del testo non è in cache, la creiamo!
+    if !cache_mut.contains_key(&cache_key) {
+        // 1. Creiamo un contesto temporaneo minuscolo solo per calcolare gli spazi
+        let tmp_surface = cairo::ImageSurface::create(cairo::Format::A8, 1, 1).unwrap();
+        let tmp_cr = cairo::Context::new(&tmp_surface).unwrap();
+        let layout = pangocairo::create_layout(&tmp_cr);
+
+        layout.set_width((block.width * pango::SCALE as f64) as i32);
+        layout.set_wrap(WrapMode::Word);
+
+        let mut full_text   = String::new();
+        let attr_list   = AttrList::new();
+        let mut byte_offset = 0u32;
         
-        let mut fd = FontDescription::new();
-        fd.set_family(&span.style.font_family);
- 
-        
-        
-        fd.set_size((span.style.size * pango::SCALE as f64) as i32);
- 
-        fd.set_weight(if span.style.bold {
-            pango::Weight::Bold
-        } else {
-            pango::Weight::Normal
-        });
- 
-        fd.set_style(if span.style.italic {
-            pango::Style::Italic
-        } else {
-            pango::Style::Normal
-        });
- 
-        
-        
-        let mut attr_font = AttrFontDesc::new(&fd);
-        attr_font.set_start_index(start);
-        attr_font.set_end_index(end);
-        attr_list.insert(attr_font);   
- 
-        
-        
-        let r16 = (span.style.color.r * 65535.0) as u16;
-        let g16 = (span.style.color.g * 65535.0) as u16;
-        let b16 = (span.style.color.b * 65535.0) as u16;
- 
-        
-        
-        let mut attr_color = AttrColor::new_foreground(r16, g16, b16);
-        attr_color.set_start_index(start);
-        attr_color.set_end_index(end);
-        attr_list.insert(attr_color);  
- 
-        full_text.push_str(&span.text);
-        byte_offset = end;
+        for span in &block.spans {
+            let start = byte_offset;
+            let end   = byte_offset + span.text.len() as u32;
+
+            let mut fd = FontDescription::new();
+            fd.set_family(&span.style.font_family);
+            fd.set_size((span.style.size * pango::SCALE as f64) as i32);
+            fd.set_weight(if span.style.bold { pango::Weight::Bold } else { pango::Weight::Normal });
+            fd.set_style(if span.style.italic { pango::Style::Italic } else { pango::Style::Normal });
+
+            let mut attr_font = AttrFontDesc::new(&fd);
+            attr_font.set_start_index(start);
+            attr_font.set_end_index(end);
+            attr_list.insert(attr_font);
+
+            let r16 = (span.style.color.r * 65535.0) as u16;
+            let g16 = (span.style.color.g * 65535.0) as u16;
+            let b16 = (span.style.color.b * 65535.0) as u16;
+
+            let mut attr_color = AttrColor::new_foreground(r16, g16, b16);
+            attr_color.set_start_index(start);
+            attr_color.set_end_index(end);
+            attr_list.insert(attr_color);
+
+            full_text.push_str(&span.text);
+            byte_offset = end;
+        }
+
+        layout.set_text(&full_text);
+        layout.set_attributes(Some(&attr_list));
+
+        // 2. Chiediamo a Pango le vere dimensioni in pixel del testo formattato
+        let (_, logical_rect) = layout.pixel_extents();
+        let real_w = (logical_rect.width() as f64 + TEXT_PADDING * 2.0).max(1.0);
+        let real_h = (logical_rect.height() as f64 + TEXT_PADDING * 2.0).max(1.0);
+
+        // 3. Creiamo la Surface finale in ALTA RISOLUZIONE (2.0x per nitidezza)
+        let render_scale = 2.0;
+        let target_w = (real_w * render_scale).ceil() as i32;
+        let target_h = (real_h * render_scale).ceil() as i32;
+
+        if let Ok(surface) = cairo::ImageSurface::create(cairo::Format::ARgb32, target_w, target_h) {
+            let final_cr = cairo::Context::new(&surface).unwrap();
+            final_cr.scale(render_scale, render_scale);
+            final_cr.move_to(TEXT_PADDING, TEXT_PADDING);
+            
+            // Colleghiamo il layout al nuovo context reale e lo disegniamo
+            pangocairo::update_layout(&final_cr, &layout);
+            pangocairo::show_layout(&final_cr, &layout);
+
+            // Salviamo la rasterizzazione in cache
+            cache_mut.insert(cache_key.clone(), surface);
+        }
     }
- 
-    
-    layout.set_text(&full_text);
-    layout.set_attributes(Some(&attr_list));
- 
-    
-    
-    
-    pangocairo::show_layout(cr, &layout);
+
+    // 4. DISEGNO FULMINEO: Recuperiamo l'immagine dalla cache e la posizioniamo!
+    if let Some(surface) = cache_mut.get(&cache_key) {
+        cr.save().ok();
+        cr.translate(ox + block.x, oy + block.y);
+        cr.scale(0.5, 0.5); // Compensiamo il moltiplicatore 2.0x usato per la nitidezza
+        cr.set_source_surface(surface, 0.0, 0.0).unwrap();
+        cr.paint().unwrap();
+        cr.restore().ok();
+    }
 }
 
 

@@ -103,16 +103,20 @@ pub(crate) fn setup_canvas_events(
                     // Riapri il menù col testo esistente
                     if let Some((new_text, new_style)) = crate::models::textbox::show_text_input_dialog(&w, &existing_style, &existing_text) {
                         let mut st_mut = state.borrow_mut();
-                        st_mut.save_snapshot(); // Salva undo
+                        let mut invalidate_id = None; // 1. Variabile temporanea
+
                         if let ComponentPayload::RichText(ref mut b) = st_mut.current_page_data.components[idx] {
                             // Sostituisci il blocco testo con quello nuovo modificato
                             b.spans = vec![TextSpan { text: new_text, style: new_style }];
+                            
+                            // 2. Salviamo l'ID
+                            invalidate_id = Some(format!("txt_{}", b.id_temporaneo));
                         }
-                        st_mut.is_modified = true;
-                        let title = st_mut.window_title();
-                        drop(st_mut);
-                        w.set_title(&title);
-                        c.queue_draw();
+
+                        // 3. Fuori dall'if, il componente non è più "preso in prestito"
+                        if let Some(id) = invalidate_id {
+                            st_mut.image_cache.borrow_mut().remove(&id);
+                        }
                     }
                     return Propagation::Stop; // Ferma il flusso del click standard
                 }

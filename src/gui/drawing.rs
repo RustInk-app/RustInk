@@ -160,9 +160,8 @@ pub fn draw_page(
                 let _ = cr.stroke();
             }
             ComponentPayload::RichText(block) => {
-                
                 cr.set_operator(cairo::Operator::Over);
-                render_rich_text_block(cr, &block, ox, oy);
+                render_rich_text_block(cr, &block, ox, oy, cache);
             }
             ComponentPayload::Shape(block) => {
                 cr.set_operator(cairo::Operator::Over);
