@@ -132,12 +132,12 @@ pub(crate) fn setup_canvas_events(
             Tool::Eraser => {
                 let mut st = s.borrow_mut();
                 st.save_snapshot();
-                st.is_drawing = true; 
-                
-                
+                st.is_drawing = true;
                 if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
-                    st.current_page_data.components.remove(idx);
-                    c.queue_draw();
+                    if matches!(st.current_page_data.components[idx], ComponentPayload::PenStroke(_)) {
+                        st.current_page_data.components.remove(idx);
+                        c.queue_draw();
+                    }
                 }
             }
 
@@ -384,10 +384,11 @@ pub(crate) fn setup_canvas_events(
                 c.queue_draw();
             } else if tool == Tool::Eraser {
                 let mut st = s.borrow_mut();
-                
                 if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
-                    st.current_page_data.components.remove(idx);
-                    c.queue_draw();
+                    if matches!(st.current_page_data.components[idx], ComponentPayload::PenStroke(_)) {
+                        st.current_page_data.components.remove(idx);
+                        c.queue_draw();
+                    }
                 }
             } else if let Tool::Shape(_) = tool {
                 if let Some(ref mut shape) = s.borrow_mut().current_shape {

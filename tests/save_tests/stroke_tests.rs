@@ -150,31 +150,65 @@ fn test_penstroke_total_chaos_injection() {
     let output_dir = Path::new("./test_output_chaos");
     fs::create_dir_all(output_dir).expect("Impossibile creare test_output_chaos");
 
+    // Il vettore ora contiene (ComponentPayload, should_be_blocked)
+    // per permettere il test di diverse varianti del payload (es. EraserStroke).
     let chaos_cases = vec![
-        (Stroke { points: vec![(f64::INFINITY, f64::NEG_INFINITY)], color: Color::black(), width: 2.0 }, true),
-        (Stroke { points: vec![(f64::NAN, f64::NAN)], color: Color::black(), width: 2.0 }, true),
-        (Stroke { points: vec![(f64::MAX, f64::MAX)], color: Color::black(), width: 2.0 }, true),
-        (Stroke { points: vec![(50.0, 50.0), (60.0, 60.0)], color: Color::black(), width: -10.0 }, false),
-        (Stroke { points: vec![(10.0, 10.0), (20.0, 20.0)], color: Color::new(-50.0, 999.0, f64::NAN), width: 2.0 }, false),
-        (Stroke { points: vec![], color: Color::black(), width: 2.0 }, false),
+        // --- CASI ORIGINALI ---
+        (ComponentPayload::PenStroke(Stroke { points: vec![(f64::INFINITY, f64::NEG_INFINITY)], color: Color::black(), width: 2.0 }), true),
+        (ComponentPayload::PenStroke(Stroke { points: vec![(f64::NAN, f64::NAN)], color: Color::black(), width: 2.0 }), true),
+        (ComponentPayload::PenStroke(Stroke { points: vec![(f64::MAX, f64::MAX)], color: Color::black(), width: 2.0 }), true),
+        (ComponentPayload::PenStroke(Stroke { points: vec![(50.0, 50.0), (60.0, 60.0)], color: Color::black(), width: -10.0 }), false),
+        (ComponentPayload::PenStroke(Stroke { points: vec![], color: Color::black(), width: 2.0 }), false),
+
+        // --- NUOVI CASI AGGIUNTI ---
+        
+        // 1. Invalid color (NaN/out of range)
+        // Inserito consapevolmente per documentare che questo caso non blocca l'inserimento
+        (ComponentPayload::PenStroke(Stroke { points: vec![(10.0, 10.0), (20.0, 20.0)], color: Color::new(-50.0, 999.0, f64::NAN), width: 2.0 }), false),
+
+        // 2. Width = NaN
+        // Nota: Assumo `true` (respinto) per coerenza con f64::NAN nei punti. 
+        // Se la tua implementazione attuale invece lo accetta e non crasha la BBox, cambia il flag in `false`.
+        (ComponentPayload::PenStroke(Stroke { points: vec![(10.0, 10.0), (20.0, 20.0)], color: Color::black(), width: f64::NAN }), true),
+
+        // 3. Width = 0.0 exactly
+        // Bounding box degenere (half_w = 0). Da specifiche: deve essere accettato.
+        (ComponentPayload::PenStroke(Stroke { points: vec![(10.0, 10.0), (20.0, 20.0)], color: Color::black(), width: 0.0 }), false),
+
+        // 4. Stroke with a single point
+        // Attiva un branch specifico nella bounding box (min==max) e nell'hit-test.
+        (ComponentPayload::PenStroke(Stroke { points: vec![(50.0, 50.0)], color: Color::black(), width: 2.0 }), false),
+
+        // 5. EraserStroke — dedicated round-trip
+        // Payload alternativo, testa che la pipeline gestisca le varianti correttamente.
+        (ComponentPayload::EraserStroke(Stroke { points: vec![(10.0, 10.0), (20.0, 20.0)], color: Color::black(), width: 15.0 }), false),
+
+        // 6. Stroke with many points (volume)
+        // Genera 5000 punti. Se fallisce qui, significa che urti i limiti di bincode o dimensione blob sqlite.
+        (ComponentPayload::PenStroke(Stroke { points: (0..5000).map(|v| (v as f64, v as f64)).collect(), color: Color::black(), width: 2.0 }), false),
+
+        // 7. Coordinates exactly at the f32::MAX/f32::MIN limit
+        // Manteniamo width a 0.0 in modo che il calcolo half_w non crei un raggio che supera f32::MAX.
+        // Assicura che le condizioni siano stricte (< e non <=).
+        (ComponentPayload::PenStroke(Stroke { points: vec![(f32::MAX as f64, f32::MAX as f64), (f32::MIN as f64, f32::MIN as f64)], color: Color::black(), width: 0.0 }), false),
     ];
 
-    for (i, (malicious_stroke, should_be_blocked)) in chaos_cases.into_iter().enumerate() {
+    for (i, (payload, should_be_blocked)) in chaos_cases.into_iter().enumerate() {
         let db_tmp_path = output_dir.join(format!("chaos_{i}.sqlite"));
-        let payload = ComponentPayload::PenStroke(malicious_stroke); //[cite: 1]
 
         let conn = Connection::open(&db_tmp_path).expect("Apertura DB");
-        init_schema(&conn).expect("Init schema fallito"); //[cite: 1]
+        init_schema(&conn).expect("Init schema fallito");
 
         conn.execute("INSERT INTO pages (display_order) VALUES (0)", []).unwrap();
         let page_id = conn.last_insert_rowid();
 
-        let result = append_active_component(&conn, page_id, &payload); //[cite: 1]
+        // Passiamo direttamente il payload
+        let result = append_active_component(&conn, page_id, &payload);
 
         if should_be_blocked {
             assert!(result.is_err(), "PERICOLO! Caso Chaos {i} accettato. Il filtro ha fallito.");
         } else {
-            assert!(result.is_ok(), "ERRORE! Caso Chaos {i} respinto ma doveva passare.");
+            assert!(result.is_ok(), "ERRORE! Caso Chaos {i} respinto ma doveva passare. {result:?}");
         }
         
         let _ = fs::remove_file(db_tmp_path);

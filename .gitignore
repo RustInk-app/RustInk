@@ -4,3 +4,5 @@ README.md
 test_output/*
 test_output_chaos/*
 test_output_edge_cases/*
+fuzz/corpus/*
+fuzz/target/*
