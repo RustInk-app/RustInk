@@ -549,6 +549,11 @@ pub(crate) fn setup_toolbar(
                     Err(e) => eprintln!("Errore inserimento pagina: {e}"),
                 }
             }
+
+            st.thumbnail_cache.borrow_mut().clear();
+            st.pending_thumbnails.borrow_mut().clear();
+            st.doc_generation += 1;
+
             let page_count = st.page_count;
             let current_page = st.current_page;
             drop(st);
@@ -598,6 +603,11 @@ pub(crate) fn setup_toolbar(
                 }
                 let page_count = st.page_count;
                 let current_page = st.current_page;
+
+                st.thumbnail_cache.borrow_mut().clear();
+                st.pending_thumbnails.borrow_mut().clear();
+                st.doc_generation += 1;
+
                 drop(st);
                 sp.set_range(1.0, page_count as f64);
                 sp.set_value((current_page + 1) as f64);

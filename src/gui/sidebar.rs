@@ -355,6 +355,11 @@ pub fn refresh_sidebar(
                             st.current_page = i; st.current_page_id = cur_id; st.current_page_data = page_data;
                         }
                     }
+
+                    st.thumbnail_cache.borrow_mut().clear();
+                    st.pending_thumbnails.borrow_mut().clear();
+                    st.doc_generation += 1;
+
                     drop(st);
                     refresh_sidebar(&s_drop, &lb_drop, &c_drop, &sp_drop, &lt_drop);
                     c_drop.queue_draw();
@@ -367,15 +372,15 @@ pub fn refresh_sidebar(
         let sp_menu = spin_page.clone(); let lt_menu = lbl_tot.clone();
 
         event_box.connect_button_press_event(move |_, event| {
-            if event.button() == 1 { 
+            if event.button() == 1 {
                 let mut st = s_click.borrow_mut();
                 let _ = st.switch_to_page(i);
                 drop(st);
                 sp_click.set_value((i + 1) as f64);
                 c_click.queue_draw();
-                return Propagation::Proceed; 
-
-            } else if event.button() == 3 { 
+                
+                return Propagation::Stop; 
+            } else if event.button() == 3 {
                 let menu = gtk::Menu::new();
                 
                 let item_up = gtk::MenuItem::with_label("Inserisci pagina sopra");
@@ -389,6 +394,11 @@ pub fn refresh_sidebar(
                         st.page_count += 1; 
                     }
                     if st.current_page >= i { st.current_page += 1; }
+
+                    st.thumbnail_cache.borrow_mut().clear();
+                    st.pending_thumbnails.borrow_mut().clear();
+                    st.doc_generation += 1;
+
                     let pc = st.page_count; let cur = st.current_page; drop(st);
                     sp1.set_range(1.0, pc as f64); sp1.set_value((cur + 1) as f64); lt1.set_text(&format!("di {}", pc));
                     refresh_sidebar(&s1, &lb1, &c1, &sp1, &lt1);
@@ -405,6 +415,11 @@ pub fn refresh_sidebar(
                         st.page_count += 1; 
                     }
                     if st.current_page > i { st.current_page += 1; }
+
+                    st.thumbnail_cache.borrow_mut().clear();
+                    st.pending_thumbnails.borrow_mut().clear();
+                    st.doc_generation += 1;
+
                     let pc = st.page_count; let cur = st.current_page; drop(st);
                     sp2.set_range(1.0, pc as f64); sp2.set_value((cur + 1) as f64); lt2.set_text(&format!("di {}", pc));
                     refresh_sidebar(&s2, &lb2, &c2, &sp2, &lt2);
@@ -430,6 +445,11 @@ pub fn refresh_sidebar(
                         st.current_page = usize::MAX;
                         let _ = st.switch_to_page(i);
                     }
+
+                    st.thumbnail_cache.borrow_mut().clear();
+                    st.pending_thumbnails.borrow_mut().clear();
+                    st.doc_generation += 1;
+
                     let pc = st.page_count; let cur = st.current_page; drop(st);
                     sp4.set_range(1.0, pc as f64); sp4.set_value((cur + 1) as f64); lt4.set_text(&format!("di {}", pc));
                     refresh_sidebar(&s4, &lb4, &c4, &sp4, &lt4);
@@ -457,6 +477,11 @@ pub fn refresh_sidebar(
                         st.current_page = usize::MAX;
                         let _ = st.switch_to_page(i);
                     }
+
+                    st.thumbnail_cache.borrow_mut().clear();
+                    st.pending_thumbnails.borrow_mut().clear();
+                    st.doc_generation += 1;
+
                     let pc = st.page_count; let cur = st.current_page; drop(st);
                     sp5.set_range(1.0, pc as f64); sp5.set_value((cur + 1) as f64); lt5.set_text(&format!("di {}", pc));
                     refresh_sidebar(&s5, &lb5, &c5, &sp5, &lt5);
@@ -481,6 +506,10 @@ pub fn refresh_sidebar(
                         st.current_page = usize::MAX; 
                         let _ = st.switch_to_page(new_idx);
                         
+                        st.thumbnail_cache.borrow_mut().clear();
+                        st.pending_thumbnails.borrow_mut().clear();
+                        st.doc_generation += 1;
+
                         let pc = st.page_count; let c_page = st.current_page; drop(st);
                         sp3.set_range(1.0, pc as f64); sp3.set_value((c_page + 1) as f64); lt3.set_text(&format!("di {}", pc));
                         refresh_sidebar(&s3, &lb3, &c3, &sp3, &lt3);

@@ -105,14 +105,26 @@ pub fn on_import_pdf_clicked(
 
     if dialog.run() == gtk::ResponseType::Accept {
         if let Some(path) = dialog.filename() {
-            unsafe { dialog.destroy(); } 
+            unsafe { dialog.destroy(); }
             
-            let st = state.borrow();
+            let mut st = state.borrow_mut();
+            
+            if let Some(conn) = &st.db {
+                let _ = conn.execute_batch("DELETE FROM component_rtree; DELETE FROM pages;");
+            }
+            
+            st.page_count = 0;
+            st.doc_generation += 1; // Forza il refresh del thread delle miniature
+            st.undo_stack.clear();
+            st.redo_stack.clear();
+            st.thumbnail_cache.borrow_mut().clear();
+            
             let db_tmp_path = match st.db_tmp_path.clone() {
                 Some(p) => p,
                 None => return, 
             };
-            let start_order = st.page_count as i64;
+            
+            let start_order = 0; // Il PDF riparte da indice 0
             drop(st);
 
             // Mostriamo il dialog di caricamento per non congelare lo schermo
