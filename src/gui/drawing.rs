@@ -93,26 +93,28 @@ pub fn draw_page(
                     
                 }
                 PaperBackground::Grid => {
-                    const GRID_SIZE: f64 = 20.0; 
+                    // Calcola dinamicamente la dimensione per avere esattamente 84 quadratini
+                    let grid_size = crate::models::page::PAGE_W / 42.0;
                     
                     cr.set_source_rgba(0.55, 0.55, 0.55, 0.75);
-                    cr.set_line_width(0.6); 
-                    
-                    
-                    let mut x = ox + GRID_SIZE;
-                    while x < ox + PAGE_W - 5.0 {
-                        cr.move_to(x, oy + 5.0);
-                        cr.line_to(x, oy + PAGE_H - 5.0);
+                    cr.set_line_width(0.6);
+
+                    // Disegna le linee verticali per l'intera altezza
+                    let mut x = ox + grid_size;
+                    while x < ox + PAGE_W {
+                        cr.move_to(x, oy);
+                        cr.line_to(x, oy + PAGE_H);
                         let _ = cr.stroke();
-                        x += GRID_SIZE;
+                        x += grid_size;
                     }
-                    
-                    let mut y = oy + GRID_SIZE;
-                    while y < oy + PAGE_H - 5.0 {
-                        cr.move_to(ox + 5.0, y);
-                        cr.line_to(ox + PAGE_W - 5.0, y);
+
+                    // Disegna le linee orizzontali per l'intera larghezza
+                    let mut y = oy + grid_size;
+                    while y < oy + PAGE_H {
+                        cr.move_to(ox, y);
+                        cr.line_to(ox + PAGE_W, y);
                         let _ = cr.stroke();
-                        y += GRID_SIZE;
+                        y += grid_size;
                     }
                 }
             }   

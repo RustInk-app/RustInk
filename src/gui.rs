@@ -107,8 +107,19 @@ pub fn build_ui(app: &gtk::Application) {
         .expect("rastin_window non trovata");
     app.add_window(&window);
     window.set_title(&state.borrow().window_title());
-    window.set_default_size(1280, 800);
+    window.maximize();
 
+    let icon_path = "src/ui/icons/rastin_logo.png";
+    if let Ok(icon) = gtk::gdk_pixbuf::Pixbuf::from_file(icon_path) {
+        // Questa vuole l'Option, quindi le passiamo Some()
+        window.set_icon(Some(&icon));
+        
+        // Questa vuole il riferimento diretto, quindi glielo diamo senza Some!
+        gtk::Window::set_default_icon(&icon);
+    } else {
+        eprintln!("[UI] Attenzione: Impossibile caricare il logo da {}", icon_path);
+    }
+    
     utils::load_css();
 
     let canvas: gtk::DrawingArea = builder
@@ -149,6 +160,8 @@ pub fn build_ui(app: &gtk::Application) {
             c.queue_draw();
         });
     }
+
+    zoom_adj.set_value(3.0);
 
     let page_listbox = setup_sidebar(&builder, &state);
     let (btn_save, btn_open) = setup_toolbar(
@@ -326,11 +339,21 @@ fn setup_menus(
     canvas: &gtk::DrawingArea,
 ) {
     let view_sidebar: gtk::CheckMenuItem = builder.object("view_sidebar_option").unwrap();
-    view_sidebar.set_active(true);
-
+    
     let sidebar_container: gtk::Box = builder
         .object("sidebar_container")
         .expect("Box sidebar mancante");
+
+    // 1. Impediamo a window.show_all() di forzare l'apertura
+    sidebar_container.set_no_show_all(true);
+    
+    // 2. FIX: Spegniamo FISICAMENTE la sidebar ignorando il file Glade
+    sidebar_container.set_visible(false);
+    
+    // 3. Sincronizziamo la spunta del menu per farla corrispondere
+    view_sidebar.set_active(false);
+
+    // 4. Colleghiamo il segnale per i click futuri
     view_sidebar.connect_toggled(glib::clone!(@weak sidebar_container => move |item| {
         sidebar_container.set_visible(item.is_active());
     }));
