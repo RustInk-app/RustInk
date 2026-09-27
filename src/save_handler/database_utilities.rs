@@ -113,11 +113,11 @@ pub fn append_active_component(
 ) -> rusqlite::Result<i64> {
     let (min_x, max_x, min_y, max_y) = bounding_box(payload);
 
-    // I limiti massimi sicuri per il motore R-Tree di SQLite (32-bit float)
+    
     let rtree_max = f32::MAX as f64;
     let rtree_min = f32::MIN as f64;
 
-    // --- SANITIZZAZIONE ANTI-CHAOS ---
+    
     if !min_x.is_finite() || !max_x.is_finite() || !min_y.is_finite() || !max_y.is_finite()
         || min_x > max_x || min_y > max_y
         || min_x < rtree_min || max_x > rtree_max
@@ -156,7 +156,7 @@ pub fn update_bookmark_status(conn: &Connection, page_id: i64, is_bookmarked: bo
     Ok(())
 }
 
-// Move a page from old_order to new_order
+
 pub fn move_page(conn: &Connection, page_id: i64, new_order: usize) -> rusqlite::Result<()> {
     let old_order: i64 = conn.query_row(
         "SELECT display_order FROM pages WHERE id = ?1",

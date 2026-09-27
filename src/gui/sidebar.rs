@@ -38,24 +38,24 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     page_listbox.style_context().add_provider(&css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
     sidebar_scrolled.add(&page_listbox);
 
-    // Creiamo la SearchBar per i segnalibri
+    
     let search_entry = gtk::SearchEntry::new();
     search_entry.set_placeholder_text(Some("Cerca nei segnalibri..."));
     search_entry.set_margin_start(8);
     search_entry.set_margin_end(8);
     search_entry.set_margin_bottom(8);
     
-    // Inseriamo la searchbar sotto lo ScrolledWindow
+    
     sidebar_container.pack_end(&search_entry, false, false, 0);
     sidebar_container.reorder_child(&search_entry, -1);
 
-    // LOGICA DI RICERCA TRAMITE TRIE
+    
     let s_search = state.clone();
     let lb_search = page_listbox.clone();
     search_entry.connect_search_changed(move |entry| {
         let query = entry.text().to_string().to_lowercase();
         s_search.borrow_mut().search_query = query;
-        lb_search.invalidate_filter(); // Forza il re-rendering basato sulla funzione filtro
+        lb_search.invalidate_filter(); 
     });
 
     let s_filter = state.clone();
@@ -64,15 +64,15 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         let idx = row.index() as usize;
 
         if st.search_query.is_empty() {
-            return true; // Se la barra è vuota, mostriamo sia "Pagina N" che i Segnalibri
+            return true; 
         }
 
-        // Se stai cercando qualcosa, mostra SOLO le pagine salvate nei preferiti...
+        
         if !st.bookmarked_pages.contains(&idx) {
             return false;
         }
 
-        // ...che corrispondono a ciò che hai scritto
+        
         let terms: Vec<&str> = st.search_query.split_whitespace().collect();
         for term in terms {
             if let Some(pages) = st.bookmark_trie.search(term) {
@@ -86,7 +86,7 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         true
     })));
 
-    // --- START THREAD BACKGROUND PER LE MINIATURE (PRIORITA' LIFO) ---
+    
     let req_stack = state.borrow().thumb_req_stack.clone();
     let (tx_wake, rx_wake) = std::sync::mpsc::channel::<()>();
     let (tx_res, rx_res) = glib::MainContext::channel(glib::Priority::DEFAULT);
@@ -97,14 +97,14 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         let mut current_db_key: Option<(std::path::PathBuf, u64)> = None;
         let mut conn: Option<rusqlite::Connection> = None;
         
-        // Mantiene il PDF in RAM separatamente per il worker, risolvendo i crash e le righe!
+        
         let mut poppler_cache = std::collections::HashMap::<i64, poppler::Document>::new();
         let pdf_surface_cache = std::cell::RefCell::new(std::collections::HashMap::new());
 
-        // Il thread dorme finché non riceve un input
+        
         while rx_wake.recv().is_ok() {
             loop {
-                // Preleva SEMPRE l'ULTIMA miniatura richiesta (LIFO = quelle appena scrollate!)
+                
                 let req = {
                     let mut stack = req_stack.lock().unwrap();
                     stack.pop()
@@ -114,11 +114,11 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
                     Some((db_path, page_index, generation)) => {
                         let key = (db_path.clone(), generation);
                         if current_db_key != Some(key.clone()) {
-                            // Documento cambiato (anche se il path fisico è identico, com'è
-                            // sempre il caso per il file di sessione): chiudiamo la vecchia
-                            // connessione e ne apriamo una nuova, altrimenti restiamo agganciati
-                            // al file precedente e blocchiamo/leggiamo dati vecchi quando il
-                            // programma sovrascrive struttura.sqlite con un documento appena aperto.
+                            
+                            
+                            
+                            
+                            
                             conn = None;
                             current_db_key = Some(key);
                             conn = rusqlite::Connection::open_with_flags(
@@ -137,7 +137,7 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
                                 if let Ok(page_data) = load_page(c, page_id) {
                                     
                                     let pdf_bg_ref = if let Ok(Some((doc_id, pdf_idx))) = get_page_pdf_ref(c, page_id) {
-                                        // Usa la cache locale per non chiamare mai più from_file due volte!
+                                        
                                         let doc = poppler_cache.entry(doc_id).or_insert_with(|| {
                                             let row = get_pdf_document(c, doc_id).unwrap();
                                             let full_path = SESSION_TEMP_DIR.path().join(&row.relative_path);
@@ -196,10 +196,10 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         }
         st.thumbnail_cache.borrow_mut().insert(idx, surf);
         
-        lb_refresh.queue_draw(); // Aggiorna graficamente
+        lb_refresh.queue_draw(); 
         glib::ControlFlow::Continue
     });
-    // --- FINE THREAD BACKGROUND ---
+    
 
    page_listbox
 }
@@ -229,7 +229,7 @@ pub fn refresh_sidebar(
         let thumb_canvas = gtk::DrawingArea::new();
         thumb_canvas.set_size_request(100, 140); 
         
-        // --- LOGICA NOMI E SEGNALIBRI ---
+        
         let mut page_label = format!("Pagina {}", i + 1);
         let mut is_bk = false;
         let mut current_page_id = -1;
@@ -237,7 +237,7 @@ pub fn refresh_sidebar(
         if let Some(conn) = &state.borrow().db {
             if let Ok(page_id) = page_id_at(conn, i) {
                 current_page_id = page_id;
-                // Query leggerissima per leggere solo il nome senza toccare i dati di disegno
+                
                 if let Ok((b_val, b_name)) = conn.query_row(
                     "SELECT is_bookmarked, bookmark_name FROM pages WHERE id = ?1",
                     rusqlite::params![page_id],
@@ -254,7 +254,7 @@ pub fn refresh_sidebar(
         }
 
         let s_clone = state.clone();
-        let p_index = i; // Usiamo l'indice della pagina
+        let p_index = i; 
 
         thumb_canvas.connect_draw(move |_, cr| {
             let st = s_clone.borrow();
@@ -263,18 +263,18 @@ pub fn refresh_sidebar(
                 cr.set_source_surface(surf, 0.0, 0.0).unwrap();
                 cr.paint().unwrap();
             } else {
-                cr.set_source_rgb(0.9, 0.9, 0.92); // Quadrato di attesa grigio
+                cr.set_source_rgb(0.9, 0.9, 0.92); 
                 cr.paint().unwrap();
                 
                 let mut pending = st.pending_thumbnails.borrow_mut();
                 if !pending.contains(&p_index) {
                     pending.insert(p_index);
                     if let (Some(tx), Some(db_path)) = (&st.thumb_wakeup_tx, &st.db_tmp_path) {
-                        // 1. Inseriamo la pagina in CIMA alla lista, insieme alla generazione
-                        // corrente del documento (serve al worker per capire se deve
-                        // riaprire la connessione anche se il path è lo stesso).
+                        
+                        
+                        
                         st.thumb_req_stack.lock().unwrap().push((db_path.clone(), p_index, st.doc_generation));
-                        // 2. Svegliamo il worker
+                        
                         let _ = tx.send(());
                     }
                 }
@@ -283,7 +283,7 @@ pub fn refresh_sidebar(
         });
 
 
-        // Contenitore Orizzontale per Nome + Tasto Cancella Segnalibro
+        
         let label = gtk::Label::new(Some(&page_label));
         label.set_line_wrap(true);
         label.set_max_width_chars(15);
@@ -293,7 +293,7 @@ pub fn refresh_sidebar(
         label_box.set_halign(gtk::Align::Center);
         label_box.pack_start(&label, true, true, 0);
 
-        // Se è un segnalibro, creiamo il pulsante per rimuoverlo
+        
         if is_bk {
             let btn_rm = gtk::Button::from_icon_name(Some("edit-delete-symbolic"), gtk::IconSize::Button);
             btn_rm.set_tooltip_text(Some("Rimuovi dai Segnalibri"));
@@ -306,11 +306,11 @@ pub fn refresh_sidebar(
             btn_rm.connect_clicked(move |_| {
                 let mut st = s_rm.borrow_mut();
                 if let Some(conn) = &st.db {
-                    // Impostiamo is_bookmarked a 0 e nome a NULL nel DB
+                    
                     let _ = update_bookmark_status(conn, p_id, false, None);
                 }
                 
-                // Se stavamo guardando proprio questa pagina, aggiorniamo il tasto della toolbar
+                
                 if st.current_page_id == p_id {
                     st.current_page_data.is_bookmarked = false;
                     st.current_page_data.bookmark_name = None;
@@ -320,7 +320,7 @@ pub fn refresh_sidebar(
                 st.rebuild_bookmark_index();
                 drop(st);
                 
-                // Ridisegniamo la sidebar: il nome tornerà automaticamente a "Pagina N" in base all'ordine attuale!
+                
                 refresh_sidebar(&s_rm, &lb_rm, &c_rm, &sp_rm, &lt_rm);
                 lb_rm.invalidate_filter();
             });

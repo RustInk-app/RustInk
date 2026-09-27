@@ -39,14 +39,14 @@ pub fn hit_test_marquee(page: &PageData, mx: f64, my: f64, cx: f64, cy: f64) -> 
     for (i, payload) in page.components.iter().enumerate() {
         if let Some((bx, by, bw, bh)) = component_bbox(payload) {
             
-            // Broad phase: Controllo preliminare sul bounding box (ottimizzazione)
+            
             if bx <= max_x && bx + bw >= min_x && by <= max_y && by + bh >= min_y {
                 
                 let is_hit = match payload {
                     ComponentPayload::PenStroke(stroke) => {
                         let mut hit = false;
                         
-                        // A. Controlla se un punto qualsiasi del tratto è letteralmente dentro l'area di selezione
+                        
                         for &(px, py) in &stroke.points {
                             if px >= min_x && px <= max_x && py >= min_y && py <= max_y {
                                 hit = true;
@@ -54,7 +54,7 @@ pub fn hit_test_marquee(page: &PageData, mx: f64, my: f64, cx: f64, cy: f64) -> 
                             }
                         }
                         
-                        // B. Se nessun punto è dentro, controlla se qualche segmento incrocia i confini dell'area
+                        
                         if !hit && stroke.points.len() > 1 {
                             for j in 0..stroke.points.len() - 1 {
                                 let (p1x, p1y) = stroke.points[j];
@@ -67,7 +67,7 @@ pub fn hit_test_marquee(page: &PageData, mx: f64, my: f64, cx: f64, cy: f64) -> 
                         }
                         hit
                     }
-                    // Testo, Immagini e Forme di base continuano a usare comodamente il Bounding Box
+                    
                     _ => true,
                 };
 
@@ -81,28 +81,28 @@ pub fn hit_test_marquee(page: &PageData, mx: f64, my: f64, cx: f64, cy: f64) -> 
 }
 
 fn segment_intersects_rect(x1: f64, y1: f64, x2: f64, y2: f64, rx1: f64, ry1: f64, rx2: f64, ry2: f64) -> bool {
-    // Se uno dei due estremi del segmento è dentro il rettangolo, c'è intersezione certa
+    
     let inside = |x, y| x >= rx1 && x <= rx2 && y >= ry1 && y <= ry2;
     if inside(x1, y1) || inside(x2, y2) {
         return true;
     }
 
-    // Algoritmo matematico per testare l'intersezione pura tra due segmenti
+    
     let intersect = |sx1: f64, sy1: f64, sx2: f64, sy2: f64, ex1: f64, ey1: f64, ex2: f64, ey2: f64| -> bool {
         let det = (sx2 - sx1) * (ey2 - ey1) - (ex2 - ex1) * (sy2 - sy1);
-        if det == 0.0 { return false; } // Linee parallele
+        if det == 0.0 { return false; } 
         let lambda = ((ey2 - ey1) * (ex2 - sx1) + (ex1 - ex2) * (ey1 - sy1)) / det;
         let gamma = ((sy1 - sy2) * (ex2 - sx1) + (sx2 - sx1) * (ey1 - sy1)) / det;
         
-        // C'è collisione solo se il punto di incontro cade fisicamente dentro la lunghezza di entrambi i segmenti (0.0 a 1.0)
+        
         lambda >= 0.0 && lambda <= 1.0 && gamma >= 0.0 && gamma <= 1.0
     };
 
-    // Verifica l'intersezione del segmento del tratto contro i 4 lati "recinto" del rettangolo di selezione
-    intersect(x1, y1, x2, y2, rx1, ry1, rx2, ry1) || // Lato superiore
-    intersect(x1, y1, x2, y2, rx1, ry2, rx2, ry2) || // Lato inferiore
-    intersect(x1, y1, x2, y2, rx1, ry1, rx1, ry2) || // Lato sinistro
-    intersect(x1, y1, x2, y2, rx2, ry1, rx2, ry2)    // Lato destro
+    
+    intersect(x1, y1, x2, y2, rx1, ry1, rx2, ry1) || 
+    intersect(x1, y1, x2, y2, rx1, ry2, rx2, ry2) || 
+    intersect(x1, y1, x2, y2, rx1, ry1, rx1, ry2) || 
+    intersect(x1, y1, x2, y2, rx2, ry1, rx2, ry2)    
 }
 
 const HANDLE_SIZE: f64 = 8.0;

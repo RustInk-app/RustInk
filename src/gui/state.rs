@@ -51,7 +51,7 @@ pub struct AppState {
     pub text_id_counter: u64,
 
     pub zoom: f64,
-    // pub scroll_offset_y: f64,
+    
 
     pub selected_index: Option<usize>,
     pub drag_mode: DragMode,
@@ -59,7 +59,7 @@ pub struct AppState {
     pub selected_indices: Vec<usize>,
     pub paper_background: PaperBackground,
     
-    // Nuovi campi per le preferenze e hold-to-switch
+    
     pub pref_trigger_1: Option<EventTrigger>,
     pub pref_tool_1: Option<Tool>,
     pub pref_trigger_2: Option<EventTrigger>,
@@ -68,11 +68,11 @@ pub struct AppState {
     pub active_temp_trigger: Option<EventTrigger>,
     pub update_toolbar_ui: Option<Rc<dyn Fn(&Tool)>>,
     
-    pub update_bookmark_ui: Option<Rc<dyn Fn(bool)>>, // Callback per il tasto
+    pub update_bookmark_ui: Option<Rc<dyn Fn(bool)>>, 
     
     pub search_query: String,
     pub bookmark_trie: SearchTrieNode,
-    pub bookmarked_pages: std::collections::HashSet<usize>, // Solo per filtering veloce
+    pub bookmarked_pages: std::collections::HashSet<usize>, 
     
     pub current_shape: Option<ShapeBlock>,
     pub current_pdf_ref: Option<crate::models::page::PdfPageRef>,
@@ -99,10 +99,10 @@ impl SearchTrieNode {
     pub fn insert(&mut self, word: &str, page_idx: usize) {
         let mut node = self;
         for c in word.chars() {
-            node.pages.insert(page_idx); // Inserisce in ogni prefisso!
+            node.pages.insert(page_idx); 
             node = node.children.entry(c).or_default();
         }
-        node.pages.insert(page_idx); // Inserisce alla fine della parola
+        node.pages.insert(page_idx); 
     }
 
     pub fn search(&self, prefix: &str) -> Option<&std::collections::HashSet<usize>> {
@@ -138,7 +138,7 @@ impl AppState {
             current_text_style: TextStyle::default(),
             text_id_counter: 0,
             zoom: 1.0,
-            // scroll_offset_y: 0.0,
+            
             selected_index: None,
             drag_mode: DragMode::None,
             image_cache: RefCell::new(std::collections::HashMap::new()),
@@ -208,8 +208,8 @@ impl AppState {
         self.db_tmp_path = Some(tmp);
         self.db = Some(conn);
 
-        // Nuovo documento = nuova "generazione": il worker delle miniature deve
-        // riaprire la connessione anche se il path del file è lo stesso.
+        
+        
         self.doc_generation += 1;
         self.current_pdf_ref = None;
         self.pdf_cache.borrow_mut().clear();
@@ -221,13 +221,13 @@ impl AppState {
         Ok(())
     }
 
-    // Ricostruisce il Trie leggendo il database. Chiamato all'avvio o quando un bookmark cambia.
+    
     pub fn rebuild_bookmark_index(&mut self) {
         self.bookmark_trie = SearchTrieNode::default();
         self.bookmarked_pages.clear();
 
         if let Some(conn) = &self.db {
-            // Estraiamo id, ordine e nome direttamente, senza aprire i Blob pesanti delle pagine
+            
             if let Ok(mut stmt) = conn.prepare("SELECT id, display_order, bookmark_name FROM pages WHERE is_bookmarked = 1") {
                 let iter = stmt.query_map([], |row| {
                     Ok((
@@ -243,7 +243,7 @@ impl AppState {
                     
                     if let Some(name) = name_opt {
                         let text = name.to_lowercase();
-                        // Inseriamo la parola intera e ogni frammento per la ricerca as-you-type
+                        
                         self.bookmark_trie.insert(&text, idx);
                         for word in text.split_whitespace() {
                             self.bookmark_trie.insert(word, idx);
@@ -264,7 +264,7 @@ impl AppState {
             self.paper_background = page.background.clone();
             self.current_page_data = page.clone();
 
-            // --- nuovo: risolvi il riferimento PDF (NULL-safe) ---
+            
             self.current_pdf_ref = get_page_pdf_ref(conn, new_id)?
                 .map(|(doc_id, page_index)| crate::models::page::PdfPageRef { doc_id, page_index });
 
@@ -279,7 +279,7 @@ impl AppState {
         Ok(())
     }
 
-    /// Carica in cache (se non già presente) il poppler::Document per un dato pdf_doc_id.
+    
     pub fn ensure_pdf_loaded(&self, doc_id: i64) {
         if self.pdf_cache.borrow().contains_key(&doc_id) {
             return;
@@ -287,7 +287,7 @@ impl AppState {
         let Some(conn) = &self.db else { return };
         let Ok(row) = get_pdf_document(conn, doc_id) else { return };
 
-        // Il path è relativo alla cartella di sessione (docs/<uuid>.pdf)
+        
         let full_path = SESSION_TEMP_DIR
             .path()
             .join(&row.relative_path);
@@ -300,7 +300,7 @@ impl AppState {
     }
 
     pub fn commit_component(&mut self, payload: ComponentPayload) {
-        self.save_snapshot(); // Fotografa lo stato PRIMA della modifica
+        self.save_snapshot(); 
 
         if let Some(conn) = &self.db {
             match append_active_component(conn, self.current_page_id, &payload) {
@@ -320,7 +320,7 @@ impl AppState {
             self.current_page_data.components = previous_components;
             self.sync_components_to_db();
             
-            // Pulisci la selezione per evitare indici sballati
+            
             self.selected_indices.clear();
             self.selected_index = None;
             self.drag_mode = DragMode::None;

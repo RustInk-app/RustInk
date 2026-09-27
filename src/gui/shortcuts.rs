@@ -34,18 +34,18 @@ pub(crate) fn setup_keyboard_shortcuts(
     let c  = canvas.clone();
     let w  = window.clone();
 
-    // Flag creato UNA SOLA VOLTA, fuori dalla closure del tasto: rappresenta
-    // "l'ultima operazione clipboard è stata un Ctrl+C interno?". Se ricreato
-    // dentro la closure (come nella versione precedente) tornerebbe sempre a
-    // `false` ad ogni pressione di tasto, perdendo lo stato.
+    
+    
+    
+    
     let internal_copy_active = Rc::new(Cell::new(false));
 
-    // Collegato una sola volta: quando la clipboard di SISTEMA cambia
-    // davvero (screenshot, copia da browser, da un altro programma...),
-    // il flag torna false, così Ctrl+V riprende a guardare l'esterno.
-    // Usiamo `connect_local` (generico, via glib::ObjectExt) al posto di
-    // `connect_owner_change`, che non è generato come binding sicuro per
-    // questo segnale in questa versione dei binding GTK.
+    
+    
+    
+    
+    
+    
     {
         let flag = internal_copy_active.clone();
         let gtk_clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
@@ -61,7 +61,7 @@ pub(crate) fn setup_keyboard_shortcuts(
         let key  = event.keyval();
         let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
 
-        // --- INIZIO HOLD-TO-SWITCH PER I TASTI ---
+        
         let key_name = key.name().unwrap_or_default().to_string();
         let key_trigger = EventTrigger::Key(key_name);
 
@@ -112,19 +112,19 @@ pub(crate) fn setup_keyboard_shortcuts(
 
         if ctrl && (key == keys::c || key == keys::C)
         {
-            // --- CTRL + C : COPIA ---
+            
             let st = state.borrow();
-            // Diamo il tipo esplicito a Rust per evitare errori di compilazione
+            
             let mut copied: Vec<crate::models::page::ComponentPayload> = Vec::new();
 
-            // Copia gli elementi dalla selezione multipla
+            
             for &idx in &st.selected_indices {
                 if let Some(comp) = st.current_page_data.components.get(idx) {
                     copied.push(comp.clone());
                 }
             }
 
-            // Per sicurezza: se usi un clic singolo senza selezioni multiple
+            
             if let Some(idx) = st.selected_index {
                 if !st.selected_indices.contains(&idx) {
                     if let Some(comp) = st.current_page_data.components.get(idx) {
@@ -150,10 +150,10 @@ pub(crate) fn setup_keyboard_shortcuts(
                         let pixbuf = gdk::gdk_pixbuf::Pixbuf::from_bytes(
                             &glib::Bytes::from(img_rgba.as_raw().as_slice()),
                             gdk::gdk_pixbuf::Colorspace::Rgb,
-                            true,   // has_alpha
+                            true,   
                             8,
                             iw, ih,
-                            iw * 4, // rowstride
+                            iw * 4, 
                         );
                         let gtk_clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
                         gtk_clipboard.set_image(&pixbuf);
@@ -169,13 +169,13 @@ pub(crate) fn setup_keyboard_shortcuts(
         }
 
         if ctrl && (key == keys::v || key == keys::V) {
-            // --- CTRL + V : INCOLLA (elementi interni + fonti esterne, unificato) ---
+            
 
-            // 1. Controlliamo la clipboard di SISTEMA solo se NON è stato appena
-            //    fatto un Ctrl+C interno. Se il flag è true, saltiamo del tutto
-            //    questo blocco e incolliamo direttamente gli elementi già in
-            //    st.clipboard, evitando che un'immagine esterna "vecchia" (mai
-            //    aggiornata dall'ultima volta) sovrascriva la copia interna.
+            
+            
+            
+            
+            
             if !internal_copy_active.get() {
                 let gtk_clipboard = gtk::Clipboard::get(&gdk::SELECTION_CLIPBOARD);
 
@@ -227,7 +227,7 @@ pub(crate) fn setup_keyboard_shortcuts(
                         let iw = iw_orig * scale;
                         let ih = ih_orig * scale;
 
-                        // --- NUOVO: RECUPERO DEL CENTRO DINAMICO DELLA VIEWPORT ---
+                        
                         let mut hadj = None;
                         let mut vadj = None;
                         let mut current_parent = canvas.parent();
@@ -240,7 +240,7 @@ pub(crate) fn setup_keyboard_shortcuts(
                             current_parent = widget.parent();
                         }
 
-                        // Calcola il centro dello schermo visibile convertendolo in coordinate del foglio
+                        
                         let (px_center, py_center) = if let (Some(h), Some(v)) = (hadj, vadj) {
                             let cx = h.value() + h.page_size() / 2.0;
                             let cy = v.value() + v.page_size() / 2.0;
@@ -254,7 +254,7 @@ pub(crate) fn setup_keyboard_shortcuts(
                         let mut x = px_center - iw / 2.0;
                         let mut y = py_center - ih / 2.0;
 
-                        // --- GESTIONE DEI BORDI (Sopra/Sotto/Lati se manca spazio) ---
+                        
                         if x + iw > crate::models::page::PAGE_W { x = crate::models::page::PAGE_W - iw; }
                         if x < 0.0 { x = 0.0; }
                         if y + ih > crate::models::page::PAGE_H { y = crate::models::page::PAGE_H - ih; }
@@ -268,21 +268,21 @@ pub(crate) fn setup_keyboard_shortcuts(
                             height: ih,
                         };
 
-                        // Qui trasferiamo il contenuto "esterno" dentro la clipboard interna
+                        
                         state.borrow_mut().clipboard =
                             vec![crate::models::page::ComponentPayload::Image(block)];
                     }
                 }
             }
 
-            // 2. Da qui in poi la logica lavora su st.clipboard, sia che provenga
-            //    da un Ctrl+C interno sia da fonti esterne.
+            
+            
             let mut st = state.borrow_mut();
             if st.clipboard.is_empty() {
                 return Propagation::Proceed;
             }
 
-            // 2a. Calcola l'ingombro massimo e minimo degli elementi nella clipboard
+            
             let mut min_x = f64::MAX;
             let mut min_y = f64::MAX;
             let mut max_x = f64::MIN;
@@ -296,12 +296,12 @@ pub(crate) fn setup_keyboard_shortcuts(
                 if cy2 > max_y { max_y = cy2; }
             }
 
-            // 2b. Calcola l'offset standard: applichiamo +20px SOLO per copie interne,
-            // così l'immagine da clipboard esterna non subisce spostamenti indesiderati.
+            
+            
             let mut offset_x = if internal_copy_active.get() { 20.0 } else { 0.0 };
             let mut offset_y = if internal_copy_active.get() { 20.0 } else { 0.0 };
 
-            // 2c. Anti-uscita dai bordi finale (ulteriore livello di sicurezza)
+            
             if max_x + offset_x > crate::models::page::PAGE_W { offset_x = crate::models::page::PAGE_W - max_x; }
             if max_y + offset_y > crate::models::page::PAGE_H { offset_y = crate::models::page::PAGE_H - max_y; }
             if min_x + offset_x < 0.0 { offset_x = -min_x; }
@@ -310,7 +310,7 @@ pub(crate) fn setup_keyboard_shortcuts(
             if offset_x < 0.0 && max_x >= crate::models::page::PAGE_W { offset_x = 0.0; }
             if offset_y < 0.0 && max_y >= crate::models::page::PAGE_H { offset_y = 0.0; }
 
-            // 2d. Trasla gli elementi
+            
             let mut new_elements: Vec<crate::models::page::ComponentPayload> = Vec::new();
 
             for comp in &mut st.clipboard {
@@ -340,7 +340,7 @@ pub(crate) fn setup_keyboard_shortcuts(
                 new_elements.push(comp.clone());
             }
 
-            // 2e. Inserimento nel DB e nello stack degli snapshot (Undo funzionante)
+            
             let start_idx = st.current_page_data.components.len();
             
             st.save_snapshot();
@@ -356,7 +356,7 @@ pub(crate) fn setup_keyboard_shortcuts(
             st.thumbnail_cache.borrow_mut().remove(&st.current_page);
             st.is_modified = true;
 
-            // 2f. Aggiorna la selezione sul nuovo elemento incollato
+            
             st.selected_indices = (start_idx..end_idx).collect();
             if end_idx - start_idx == 1 {
                 st.selected_index = Some(start_idx);
@@ -411,8 +411,8 @@ pub(crate) fn setup_keyboard_shortcuts(
                 }
 
                 st.is_modified = true;
-                // st.undo_stack.clear();
-                // st.redo_stack.clear();
+                
+                
                 let title = st.window_title();
                 drop(st);
                 window.set_title(&title);
@@ -434,7 +434,7 @@ pub(crate) fn setup_keyboard_shortcuts(
         Propagation::Proceed
     }));
 
-    // --- INIZIO RILASCIO TASTO (HOLD-TO-SWITCH) ---
+    
     window.connect_key_release_event(clone!(@strong s as state, @strong c as canvas => move |_, event| {
         let key_name = event.keyval().name().unwrap_or_default().to_string();
         let key_trigger = EventTrigger::Key(key_name);
@@ -461,5 +461,5 @@ pub(crate) fn setup_keyboard_shortcuts(
         }
         Propagation::Proceed
     }));
-    // --- FINE RILASCIO TASTO ---
+    
 }

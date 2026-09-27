@@ -22,7 +22,7 @@ use crate::save_handler::autosave_utilities::*;
 
 const DB_ENTRY: &str = "struttura.sqlite";
 
-// They encode/decode objects into bytes that we will then save in our format
+
 
 pub fn encode_payload(payload: &ComponentPayload) -> Vec<u8> {
     bincode::serialize(payload).expect("bincode serialize ComponentPayload")
@@ -221,7 +221,7 @@ pub fn load_page_full(
     ))
 }
 
-// Medias
+
 
 pub fn export_medias(db_path: &Path, bundle_path: &Path) -> io::Result<()> {
     let db_bytes = std::fs::read(db_path)?;

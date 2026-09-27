@@ -5,7 +5,7 @@ use RASTIN::models::textbox::{RichTextBlock, TextSpan, TextStyle};
 use RASTIN::models::color::Color;
 use RASTIN::models::select::hit_test_component;
 
-// Funzione helper per creare la pagina base da usare nei test
+
 fn setup_test_page() -> PageData {
     let mut page = PageData::new();
     
@@ -32,7 +32,7 @@ fn test_eraser_deletes_pen_strokes() {
     let hit = hit_test_component(&page, 75.0, 75.0);
     assert_eq!(hit, Some(0), "Il motore di selezione deve trovare il PenStroke.");
     
-    // Simula il check in canvas_events.rs
+    
     let can_delete = matches!(page.components[hit.unwrap()], ComponentPayload::PenStroke(_));
     assert!(can_delete, "ERRORE: L'interfaccia non permetterebbe di cancellare il PenStroke.");
 }
@@ -41,11 +41,11 @@ fn test_eraser_deletes_pen_strokes() {
 fn test_eraser_ignores_shapes() {
     let page = setup_test_page();
     
-    // hit_test_component trova la forma (ritorna Some(1))
+    
     let hit = hit_test_component(&page, 225.0, 225.0);
     assert!(hit.is_some(), "Il motore di selezione deve trovare la forma");
     
-    // Simula il check in canvas_events.rs
+    
     let can_delete = matches!(page.components[hit.unwrap()], ComponentPayload::PenStroke(_));
     assert!(!can_delete, "PERICOLO: L'interfaccia crederebbe che la forma sia un PenStroke e la eliminerebbe!");
 }

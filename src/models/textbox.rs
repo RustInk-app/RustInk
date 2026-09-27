@@ -76,12 +76,12 @@ pub fn render_rich_text_block(
     cache: &RefCell<std::collections::HashMap<String, cairo::ImageSurface>>
 ) {
     let mut cache_mut = cache.borrow_mut();
-    // Usiamo l'ID univoco del blocco come chiave di cache
+    
     let cache_key = format!("txt_{}", block.id_temporaneo);
 
-    // Se l'immagine del testo non è in cache, la creiamo!
+    
     if !cache_mut.contains_key(&cache_key) {
-        // 1. Creiamo un contesto temporaneo minuscolo solo per calcolare gli spazi
+        
         let tmp_surface = cairo::ImageSurface::create(cairo::Format::A8, 1, 1).unwrap();
         let tmp_cr = cairo::Context::new(&tmp_surface).unwrap();
         let layout = pangocairo::create_layout(&tmp_cr);
@@ -124,12 +124,12 @@ pub fn render_rich_text_block(
         layout.set_text(&full_text);
         layout.set_attributes(Some(&attr_list));
 
-        // 2. Chiediamo a Pango le vere dimensioni in pixel del testo formattato
+        
         let (_, logical_rect) = layout.pixel_extents();
         let real_w = (logical_rect.width() as f64 + TEXT_PADDING * 2.0).max(1.0);
         let real_h = (logical_rect.height() as f64 + TEXT_PADDING * 2.0).max(1.0);
 
-        // 3. Creiamo la Surface finale in ALTA RISOLUZIONE (2.0x per nitidezza)
+        
         let render_scale = 2.0;
         let target_w = (real_w * render_scale).ceil() as i32;
         let target_h = (real_h * render_scale).ceil() as i32;
@@ -139,20 +139,20 @@ pub fn render_rich_text_block(
             final_cr.scale(render_scale, render_scale);
             final_cr.move_to(TEXT_PADDING, TEXT_PADDING);
             
-            // Colleghiamo il layout al nuovo context reale e lo disegniamo
+            
             pangocairo::update_layout(&final_cr, &layout);
             pangocairo::show_layout(&final_cr, &layout);
 
-            // Salviamo la rasterizzazione in cache
+            
             cache_mut.insert(cache_key.clone(), surface);
         }
     }
 
-    // 4. DISEGNO FULMINEO: Recuperiamo l'immagine dalla cache e la posizioniamo!
+    
     if let Some(surface) = cache_mut.get(&cache_key) {
         cr.save().ok();
         cr.translate(ox + block.x, oy + block.y);
-        cr.scale(0.5, 0.5); // Compensiamo il moltiplicatore 2.0x usato per la nitidezza
+        cr.scale(0.5, 0.5); 
         cr.set_source_surface(surface, 0.0, 0.0).unwrap();
         cr.paint().unwrap();
         cr.restore().ok();

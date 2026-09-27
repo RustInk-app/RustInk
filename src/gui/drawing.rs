@@ -51,11 +51,11 @@ pub fn draw_page(
     page: &PageData,
     ox: f64,
     oy: f64,
-    zoom: f64, // Nuovo parametro
+    zoom: f64, 
     cache: &std::cell::RefCell<std::collections::HashMap<String, cairo::ImageSurface>>,
     bg: &PaperBackground,
-    pdf_bg: Option<(&poppler::Document, i64, i64)>, // doc, doc_id, page_index
-    pdf_surface_cache: &std::cell::RefCell<std::collections::HashMap<(i64, i64, u32), cairo::ImageSurface>>, // Nuovo parametro
+    pdf_bg: Option<(&poppler::Document, i64, i64)>, 
+    pdf_surface_cache: &std::cell::RefCell<std::collections::HashMap<(i64, i64, u32), cairo::ImageSurface>>, 
 )
 {
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.35);
@@ -70,7 +70,7 @@ pub fn draw_page(
     {
         Some((doc, doc_id, page_index)) => 
         {
-            // Il PDF viene disegnato usando il sistema di cache ad alte prestazioni
+            
             draw_pdf_background(cr, doc, doc_id, page_index, ox, oy, zoom, pdf_surface_cache);
         }
         None => 
@@ -93,13 +93,13 @@ pub fn draw_page(
                     
                 }
                 PaperBackground::Grid => {
-                    // Calcola dinamicamente la dimensione per avere esattamente 84 quadratini
+                    
                     let grid_size = crate::models::page::PAGE_W / 42.0;
                     
                     cr.set_source_rgba(0.55, 0.55, 0.55, 0.75);
                     cr.set_line_width(0.6);
 
-                    // Disegna le linee verticali per l'intera altezza
+                    
                     let mut x = ox + grid_size;
                     while x < ox + PAGE_W {
                         cr.move_to(x, oy);
@@ -108,7 +108,7 @@ pub fn draw_page(
                         x += grid_size;
                     }
 
-                    // Disegna le linee orizzontali per l'intera larghezza
+                    
                     let mut y = oy + grid_size;
                     while y < oy + PAGE_H {
                         cr.move_to(ox, y);
@@ -185,10 +185,10 @@ pub fn draw_page(
     let _ = cr.stroke();
 }
 
-/// Disegna la pagina `page_index` del documento poppler `doc` scalata per
-/// riempire esattamente il riquadro (PAGE_W x PAGE_H), all'origine (ox, oy).
-/// Questo è vettoriale: nessuna rasterizzazione manuale, poppler disegna
-/// direttamente sul cairo::Context passato.
+
+
+
+
 pub fn draw_pdf_background(
     cr: &Context,
     doc: &poppler::Document,
@@ -203,26 +203,26 @@ pub fn draw_pdf_background(
     let (pw, ph) = pdf_page.size();
     if pw <= 0.0 || ph <= 0.0 { return; }
 
-    // --- 1. IL VERO SEGRETO: Due sole risoluzioni fisse! ---
-    // Se lo zoom è molto piccolo (es. Sidebar), creiamo una miniatura.
-    // Altrimenti creiamo un'immagine ad alta risoluzione (Canvas).
+    
+    
+    
     let is_thumbnail = zoom < 0.5;
     let zoom_key = if is_thumbnail { 0 } else { 1 };
     
-    // La chiave della cache ora NON cambia ai micro-movimenti dello zoom!
+    
     let cache_key = (doc_id, page_index, zoom_key);
 
     let mut cache = surface_cache.borrow_mut();
 
-    // --- 2. Limite alzato a 150 ---
-    // Questo permette di scorrere agevolmente PDF da decine e decine 
-    // di pagine nella sidebar senza mai svuotare la cache!
+    
+    
+    
     if cache.len() > 150 {
         cache.clear();
     }
 
     let surface = cache.entry(cache_key).or_insert_with(|| {
-        // Scala: Sidebar = microscopico (0.2x). Canvas = Alta risoluzione fissa (2.0x).
+        
         let render_scale = if is_thumbnail { 0.2 } else { 2.0 };
         
         let target_w = (PAGE_W * render_scale) as i32;
@@ -239,7 +239,7 @@ pub fn draw_pdf_background(
         let scale_y = (target_h as f64) / ph;
         ctx.scale(scale_x, scale_y);
 
-        // Questo render pesante ora avviene al massimo DUE volte per pagina in tutta la sessione!
+        
         pdf_page.render(&ctx);
 
         surface
@@ -248,10 +248,10 @@ pub fn draw_pdf_background(
     cr.save().ok();
     cr.translate(ox, oy);
 
-    // --- 3. Hardware Scaling In Tempo Reale ---
-    // Dato che il nostro context grafico (cr) è GIA' influenzato dallo zoom globale 
-    // (nel setup del canvas), dobbiamo solo "riportare" l'immagine alla dimensione base di PAGE_W.
-    // Cairo scalerà la bitmap fisicamente. È un'operazione fulminea!
+    
+    
+    
+    
     let render_scale = if is_thumbnail { 0.2 } else { 2.0 };
     cr.scale(1.0 / render_scale, 1.0 / render_scale);
 
@@ -270,19 +270,19 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
         let alloc = widget.allocation();
         let w = alloc.width() as f64;
         
-        // Sfondo grigio della finestra di base
+        
         cr.set_source_rgb(0.18, 0.18, 0.22);
         let _ = cr.paint();
 
         let zoom = s.borrow().zoom;
         
-        // --- NUOVO: Margine fisso decorativo tra il foglio e l'interfaccia ---
+        
         let margin = 40.0; 
         
         let page_w_zoomed = PAGE_W * zoom;
         let page_h_zoomed = PAGE_H * zoom;
         
-        // L'origine Y è sempre ancorata al margine. Sarà GTK a muovere tutto in alto/basso!
+        
         let ox_widget = ((w - page_w_zoomed) / 2.0).max(margin);
         let oy_widget = margin; 
 
@@ -294,7 +294,7 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
 
         let st = s.borrow();
 
-        // Risolvi lo sfondo PDF estraendo anche il doc_id (necessario per la chiave di cache)
+        
         let pdf_bg = st.current_pdf_ref.and_then(|pref| {
             let cache = st.pdf_cache.borrow();
             cache.get(&pref.doc_id).cloned().map(|doc| (doc, pref.doc_id, pref.page_index))
@@ -346,12 +346,12 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
         
         let mut last = last_size.borrow_mut();
         
-        // Richiediamo a GTK di aggiornare le scrollbar SOLO se la dimensione è fisicamente cambiata
+        
         if last.0 != needed_w || last.1 != needed_h {
             *last = (needed_w, needed_h);
             
-            // glib::idle_add_local dice a GTK: "Appena hai finito di renderizzare questo fotogramma 
-            // e sei a riposo, aggiorna le dimensioni". Questo spezza il loop!
+            
+            
             glib::idle_add_local(clone!(@weak widget => @default-return ControlFlow::Break, move || {
                 widget.set_size_request(needed_w, needed_h);
                 ControlFlow::Break

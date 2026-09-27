@@ -5,21 +5,21 @@ use RASTIN::save_handler::db::{init_schema, load_page, encode_payload_list};
 use RASTIN::save_handler::database_utilities::append_active_component;
 use rusqlite::Connection;
 
-/// Helper per preparare un database di test in RAM
+
 fn setup_memory_db() -> (Connection, i64) {
     let conn = Connection::open_in_memory().expect("Impossibile aprire DB in memoria");
-    init_schema(&conn).expect("Init schema fallito"); //
+    init_schema(&conn).expect("Init schema fallito"); 
     
-    // Creiamo una pagina vuota
-    conn.execute("INSERT INTO pages (display_order) VALUES (0)", []).unwrap(); //
+    
+    conn.execute("INSERT INTO pages (display_order) VALUES (0)", []).unwrap(); 
     let page_id = conn.last_insert_rowid();
     
-    // Inseriamo il layer di base vuoto per coerenza con la struttura
-    let empty_blob = encode_payload_list(&[]); //
+    
+    let empty_blob = encode_payload_list(&[]); 
     conn.execute(
         "INSERT INTO base_layers (page_id, baked_blob) VALUES (?1, ?2)", 
         rusqlite::params![page_id, empty_blob]
-    ).unwrap(); //
+    ).unwrap(); 
 
     (conn, page_id)
 }
@@ -28,13 +28,13 @@ fn setup_memory_db() -> (Connection, i64) {
 fn test_textbox_basic_properties_roundtrip() {
     let (conn, page_id) = setup_memory_db();
 
-    // Prepariamo un testo complesso con caratteri speciali, \n, \r e stile personalizzato
+    
     let original_text = "Testo con a capo\nE un ritorno a carrello\r\nE caratteri speciali: 🚀 @#!!";
     let original_style = TextStyle {
-        font_family: "Comic Sans MS".to_string(), // Test font arbitrario[cite: 1]
-        size: 42.0,                               // Test size specifica[cite: 1]
-        color: Color::new(1.0, 0.0, 0.5),         // Test colore personalizzato[cite: 1]
-        bold: true,                               // Test formattazione[cite: 1]
+        font_family: "Comic Sans MS".to_string(), 
+        size: 42.0,                               
+        color: Color::new(1.0, 0.0, 0.5),         
+        bold: true,                               
         italic: false,
     };
 
@@ -47,16 +47,16 @@ fn test_textbox_basic_properties_roundtrip() {
             text: original_text.to_string(),
             style: original_style.clone(),
         }],
-    }); //[cite: 1]
+    }); 
 
-    // Salviamo nel DB
-    let result = append_active_component(&conn, page_id, &payload); //[cite: 1]
+    
+    let result = append_active_component(&conn, page_id, &payload); 
     assert!(result.is_ok(), "Fallimento nel salvataggio del blocco di testo nel DB.");
 
-    // Ricarichiamo la pagina dal DB
-    let page = load_page(&conn, page_id).expect("Errore nel caricamento della pagina"); //[cite: 1]
     
-    // Verifichiamo che il componente esista e sia intatto
+    let page = load_page(&conn, page_id).expect("Errore nel caricamento della pagina"); 
+    
+    
     assert_eq!(page.components.len(), 1, "Il componente testo non è stato salvato correttamente.");
 
     if let ComponentPayload::RichText(saved_block) = &page.components[0] {
@@ -68,7 +68,7 @@ fn test_textbox_basic_properties_roundtrip() {
         let saved_span = &saved_block.spans[0];
         assert_eq!(saved_span.text, original_text, "I caratteri speciali (\\n, \\r, emoji) sono stati corrotti!");
         
-        // Verifica stile
+        
         assert_eq!(saved_span.style.font_family, "Comic Sans MS", "Font perso durante il salvataggio");
         assert_eq!(saved_span.style.size, 42.0, "Size persa durante il salvataggio");
         assert!(saved_span.style.bold, "Grassetto perso durante il salvataggio");
@@ -83,28 +83,28 @@ fn test_textbox_basic_properties_roundtrip() {
 fn test_multiple_textboxes_and_volume_bbox() {
     let (conn, page_id) = setup_memory_db();
 
-    // 1. Blocco corto e largo (una sola riga)
+    
     let short_block = RichTextBlock {
         id_temporaneo: "txt_short".to_string(),
-        x: 50.0, y: 50.0, width: 800.0, // Larghezza enorme[cite: 1]
+        x: 50.0, y: 50.0, width: 800.0, 
         spans: vec![TextSpan {
-            text: "Titolo Breve".to_string(), // Pochi caratteri[cite: 1]
+            text: "Titolo Breve".to_string(), 
             style: TextStyle { size: 12.0, ..Default::default() }
         }],
-    }; //[cite: 1]
+    }; 
 
-    // 2. Blocco gigante (migliaia di caratteri) in uno spazio strettissimo
-    let huge_text = "Parola ".repeat(5000); // 35.000 caratteri
+    
+    let huge_text = "Parola ".repeat(5000); 
     let tall_block = RichTextBlock {
         id_temporaneo: "txt_tall".to_string(),
-        x: 100.0, y: 100.0, width: 50.0, // Larghezza minuscola per forzare l'a-capo[cite: 1]
+        x: 100.0, y: 100.0, width: 50.0, 
         spans: vec![TextSpan {
             text: huge_text,
             style: TextStyle { size: 10.0, ..Default::default() }
         }],
-    }; //[cite: 1]
+    }; 
 
-    // 3. Blocco multi-span (stili diversi nello stesso testo)
+    
     let multispan_block = RichTextBlock {
         id_temporaneo: "txt_multi".to_string(),
         x: 200.0, y: 200.0, width: 300.0,
@@ -113,28 +113,28 @@ fn test_multiple_textboxes_and_volume_bbox() {
             TextSpan { text: "Rosso ".to_string(), style: TextStyle { color: Color::new(1.0,0.0,0.0), ..Default::default() } },
             TextSpan { text: "Fine".to_string(), style: TextStyle::default() },
         ],
-    }; //[cite: 1]
+    }; 
 
-    // Inseriamo tutto nella stessa pagina
-    append_active_component(&conn, page_id, &ComponentPayload::RichText(short_block.clone())).unwrap(); //[cite: 1]
-    append_active_component(&conn, page_id, &ComponentPayload::RichText(tall_block.clone())).unwrap(); //[cite: 1]
-    append_active_component(&conn, page_id, &ComponentPayload::RichText(multispan_block.clone())).unwrap(); //[cite: 1]
+    
+    append_active_component(&conn, page_id, &ComponentPayload::RichText(short_block.clone())).unwrap(); 
+    append_active_component(&conn, page_id, &ComponentPayload::RichText(tall_block.clone())).unwrap(); 
+    append_active_component(&conn, page_id, &ComponentPayload::RichText(multispan_block.clone())).unwrap(); 
 
-    // Carichiamo e verifichiamo la coesistenza pacifica
-    let page = load_page(&conn, page_id).unwrap(); //[cite: 1]
+    
+    let page = load_page(&conn, page_id).unwrap(); 
     assert_eq!(page.components.len(), 3, "Non tutti i blocchi di testo sono stati caricati!");
 
-    // Testiamo la logica di auto-resize e bounding box del programma (approx_bbox)
     
-    // Il blocco 1 (breve) ha una width enorme (800) ma contiene poco testo.
-    // L'approx_bbox calcola le righe in base alla width. Dovrebbe occupare 1 sola riga (altezza minima)[cite: 1].
-    let (_, _, _, short_h) = short_block.approx_bbox(); //[cite: 1]
-    let line_height = 12.0 * 1.6; // Come definito in approx_bbox (size * 1.6)[cite: 1]
+    
+    
+    
+    let (_, _, _, short_h) = short_block.approx_bbox(); 
+    let line_height = 12.0 * 1.6; 
     assert_eq!(short_h - short_block.y, line_height, "Il blocco corto dovrebbe occupare esattamente una riga in altezza.");
 
-    // Il blocco 2 (lunghissimo) è forzato in un width di 50.0[cite: 1].
-    // Deve generare un bounding box altissimo per contenere le 5000 parole.
-    let (_, _, _, tall_h) = tall_block.approx_bbox(); //[cite: 1]
+    
+    
+    let (_, _, _, tall_h) = tall_block.approx_bbox(); 
     let calculated_height = tall_h - tall_block.y;
     assert!(
         calculated_height > 1000.0, 
@@ -142,7 +142,7 @@ fn test_multiple_textboxes_and_volume_bbox() {
         calculated_height
     );
 
-    // Il blocco 3 deve avere correttamente mantenuto l'array multi-span.
+    
     if let ComponentPayload::RichText(loaded_multi) = &page.components[2] {
         assert_eq!(loaded_multi.spans.len(), 3, "Gli span multipli sono andati persi");
         assert_eq!(loaded_multi.spans[1].style.color.r, 1.0, "Il colore dello span centrale è corretto");
@@ -153,13 +153,13 @@ fn test_multiple_textboxes_and_volume_bbox() {
 fn test_multiple_texts_with_zoom_fluctuations_on_same_page() {
     let (conn, page_id) = setup_memory_db();
     
-    // Simuliamo lo stato dell'applicazione caricando la pagina UNA SOLA VOLTA all'inizio
-    let mut current_page = load_page(&conn, page_id).unwrap(); //[cite: 1]
+    
+    let mut current_page = load_page(&conn, page_id).unwrap(); 
     let mut simulated_zoom: f64;
 
-    // ==========================================
-    // 1. INSERIMENTO TESTO BREVE E 10 ZOOM
-    // ==========================================
+    
+    
+    
     let short_text = RichTextBlock {
         id_temporaneo: "txt_short".to_string(),
         x: 50.0, y: 50.0, width: 200.0,
@@ -167,22 +167,22 @@ fn test_multiple_texts_with_zoom_fluctuations_on_same_page() {
             text: "Ciao RASTIN!".to_string(), 
             style: TextStyle::default() 
         }],
-    }; //[cite: 1]
+    }; 
     
-    // Salviamo nel DB e aggiungiamo alla NOSTRA pagina in memoria
-    let payload1 = ComponentPayload::RichText(short_text); //[cite: 1]
-    append_active_component(&conn, page_id, &payload1).unwrap(); //[cite: 1]
-    current_page.components.push(payload1); //[cite: 1]
+    
+    let payload1 = ComponentPayload::RichText(short_text); 
+    append_active_component(&conn, page_id, &payload1).unwrap(); 
+    current_page.components.push(payload1); 
 
-    // Fluttuazioni di zoom (Tutti gli elementi finora: 1)
+    
     for i in 1..=10 {
         simulated_zoom = 0.5 + (i as f64 * 0.2); 
         assert_eq!(current_page.components.len(), 1, "Il numero di componenti deve essere 1");
     }
 
-    // ==========================================
-    // 2. INSERIMENTO TESTO MEDIO E 10 ZOOM
-    // ==========================================
+    
+    
+    
     let medium_text = RichTextBlock {
         id_temporaneo: "txt_med".to_string(),
         x: 100.0, y: 150.0, width: 350.0,
@@ -192,21 +192,21 @@ fn test_multiple_texts_with_zoom_fluctuations_on_same_page() {
                    ridimensionamenti del canvas.".to_string(), 
             style: TextStyle { size: 14.0, ..Default::default() } 
         }],
-    }; //[cite: 1]
+    }; 
 
-    let payload2 = ComponentPayload::RichText(medium_text); //[cite: 1]
-    append_active_component(&conn, page_id, &payload2).unwrap(); //[cite: 1]
-    current_page.components.push(payload2); //[cite: 1] // Accumuliamo SULLA STESSA PAGINA
+    let payload2 = ComponentPayload::RichText(medium_text); 
+    append_active_component(&conn, page_id, &payload2).unwrap(); 
+    current_page.components.push(payload2); 
 
-    // Fluttuazioni di zoom (Tutti gli elementi finora: 2)
+    
     for i in 1..=10 {
         simulated_zoom = 3.0 - (i as f64 * 0.15);
         assert_eq!(current_page.components.len(), 2, "Il numero di componenti deve essere 2");
     }
 
-    // ==========================================
-    // 3. INSERIMENTO TESTO LUNGO E 10 ZOOM
-    // ==========================================
+    
+    
+    
     let lorem_ipsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
         Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, \
         quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. \
@@ -221,24 +221,24 @@ fn test_multiple_texts_with_zoom_fluctuations_on_same_page() {
             text: lorem_ipsum, 
             style: TextStyle { size: 10.0, color: Color::new(0.2, 0.2, 0.2), ..Default::default() } 
         }],
-    }; //[cite: 1]
+    }; 
 
-    let payload3 = ComponentPayload::RichText(long_text); //[cite: 1]
-    append_active_component(&conn, page_id, &payload3).unwrap(); //[cite: 1]
-    current_page.components.push(payload3); //[cite: 1] // Accumuliamo SULLA STESSA PAGINA
+    let payload3 = ComponentPayload::RichText(long_text); 
+    append_active_component(&conn, page_id, &payload3).unwrap(); 
+    current_page.components.push(payload3); 
 
-    // Fluttuazioni di zoom (Tutti gli elementi finora: 3)
+    
     for i in 1..=10 {
         simulated_zoom = (100 * i/2) as f64;
         
-        // Verifichiamo che i 3 elementi siano ancora tutti lì sulla stessa pagina
+        
         assert_eq!(current_page.components.len(), 3, "Il numero di componenti deve essere 3");
 
-        // Per ogni livello di zoom, calcoliamo le proiezioni visive di tutti e 3 gli elementi!
-        for comp in &current_page.components { //[cite: 1]
+        
+        for comp in &current_page.components { 
             if let ComponentPayload::RichText(block) = comp {
                 let visual_width = block.width * simulated_zoom;
-                let (_, _, _, approx_h) = block.approx_bbox(); //[cite: 1]
+                let (_, _, _, approx_h) = block.approx_bbox(); 
                 let visual_height = (approx_h - block.y) * simulated_zoom;
                 
                 assert!(visual_width > 0.0 && visual_height > 0.0, "La proiezione visiva ha fallito!");
@@ -246,8 +246,8 @@ fn test_multiple_texts_with_zoom_fluctuations_on_same_page() {
         }
     }
     
-    // Verifica finale di coerenza col database:
-    // Ricarichiamo la pagina da zero e ci assicuriamo che corrisponda al nostro stato in memoria
-    let saved_page = load_page(&conn, page_id).unwrap(); //[cite: 1]
+    
+    
+    let saved_page = load_page(&conn, page_id).unwrap(); 
     assert_eq!(saved_page.components.len(), 3, "Il database non ha salvato tutti e 3 i testi sulla pagina.");
 }

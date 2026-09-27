@@ -203,15 +203,15 @@ pub(crate) fn setup_toolbar(
                 let mut changed = false;
                 let mut switch_to_pen = false;
 
-                // 1. Modifichiamo lo stato e SALVIAMO IL COLORE come prima cosa!
-                // Manteniamo il borrow_mut isolato nelle parentesi graffe.
+                
+                
                 {
                     let mut st = s.borrow_mut();
-                    if st.current_color == c_clone { return; } // Esci se è già questo il colore
+                    if st.current_color == c_clone { return; } 
                     st.current_color = c_clone.clone();
 
                     let indices = st.selected_indices.clone();
-                    let mut texts_to_invalidate = Vec::new(); // 1. Creiamo un contenitore temporaneo
+                    let mut texts_to_invalidate = Vec::new(); 
 
                     for idx in indices {
                         if let Some(comp) = st.current_page_data.components.get_mut(idx) {
@@ -219,9 +219,9 @@ pub(crate) fn setup_toolbar(
                                 ComponentPayload::PenStroke(stroke) => { stroke.color = c_clone.clone(); changed = true; }
                                 ComponentPayload::Shape(shape) => { shape.color = c_clone.clone(); changed = true; }
                                 ComponentPayload::RichText(block) => {
-                                    for span in &mut block.spans { span.style.color = c_clone.clone(); } // o new_c.clone() nel custom
+                                    for span in &mut block.spans { span.style.color = c_clone.clone(); } 
                                     
-                                    // 2. Invece di toccare la cache qui, salviamo l'ID per dopo
+                                    
                                     texts_to_invalidate.push(format!("txt_{}", block.id_temporaneo));
                                     changed = true;
                                 }
@@ -230,8 +230,8 @@ pub(crate) fn setup_toolbar(
                         }
                     }
 
-                    // 3. Ora che il blocco 'match' è chiuso, Rust ha rilasciato il prestito mutabile!
-                    // Possiamo svuotare la cache in totale sicurezza.
+                    
+                    
                     for id in texts_to_invalidate {
                         st.image_cache.borrow_mut().remove(&id);
                     }
@@ -248,15 +248,15 @@ pub(crate) fn setup_toolbar(
                         st.redo_stack.clear();
                     }
 
-                    // Prepara il cambio a Penna se usavamo la gomma
+                    
                     if st.active_tool == Tool::Eraser {
                         st.active_tool = Tool::Pen;
                         switch_to_pen = true;
                     }
-                } // IL BORROW MUTABILE SI CHIUDE QUI
+                } 
 
-                // 2. SOLO ORA disattiviamo gli altri bottoni.
-                // Avendo già aggiornato lo stato sopra, i loro gestori "sapranno" di doversi spegnere senza fare storie.
+                
+                
                 for other in &all_toggles {
                     if other != b {
                         other.set_active(false);
@@ -267,8 +267,8 @@ pub(crate) fn setup_toolbar(
                     c_canvas.queue_draw();
                 }
 
-                // 3. Estraiamo la callback clonandola PRIMA di chiamarla, in modo
-                // da non tenere aperto s.borrow() durante il trigger di segnali GTK!
+                
+                
                 if switch_to_pen {
                     let cb = s.borrow().update_toolbar_ui.clone();
                     if let Some(f) = cb {
@@ -276,7 +276,7 @@ pub(crate) fn setup_toolbar(
                     }
                 }
             } else {
-                // Se l'utente clicca sul colore che è già attivo provando a spegnerlo, lo riaccendiamo forzatamente
+                
                 if s.borrow().current_color == c_clone {
                     b.set_active(true);
                 }
@@ -285,7 +285,7 @@ pub(crate) fn setup_toolbar(
         add_item!(btn);
     }
     
-    // Attiviamo il primo bottone (Nero) all'avvio
+    
     if let Some((_, first_btn)) = color_toggles.first() {
         first_btn.set_active(true);
     }
@@ -306,7 +306,7 @@ pub(crate) fn setup_toolbar(
                 let mut changed = false;
                 let mut switch_to_pen = false;
 
-                // Stessa logica isolata per il colore personalizzato
+                
                 {
                     let mut st = s.borrow_mut();
                     st.current_color = new_c.clone();
@@ -342,9 +342,9 @@ pub(crate) fn setup_toolbar(
                         st.active_tool = Tool::Pen;
                         switch_to_pen = true;
                     }
-                } // Fine del borrow_mut
+                } 
 
-                // Deselezioniamo visivamente tutti i preset (sicuro da fare qui)
+                
                 for other in &all_toggles {
                     other.set_active(false);
                 }
@@ -430,7 +430,7 @@ pub(crate) fn setup_toolbar(
         btn.connect_toggled(move |b| {
             let is_active = b.is_active();
 
-            // 1. Controlliamo se serve fare qualcosa usando un borrow CORTISSIMO (solo lettura)
+            
             let (needs_update, page_id) = {
                 let st = s.borrow();
                 if st.current_page_data.is_bookmarked == is_active {
@@ -440,13 +440,13 @@ pub(crate) fn setup_toolbar(
                 }
             };
 
-            // Se non c'è nulla da aggiornare usciamo subito
+            
             if !needs_update { return; }
 
             let mut custom_name = None;
             let mut user_cancelled = false;
 
-            // 2. Apriamo il popup QUANDO NESSUN BORROW E' ATTIVO!
+            
             if is_active {
                 let dialog = gtk::Dialog::with_buttons(
                     Some("Nuovo Segnalibro"),
@@ -464,8 +464,8 @@ pub(crate) fn setup_toolbar(
                 content_area.pack_start(&entry, true, true, 0);
                 dialog.show_all();
 
-                // L'app aspetta qui, ma lo stato non è bloccato, 
-                // quindi le miniature nella sidebar possono disegnarsi liberamente!
+                
+                
                 if dialog.run() == gtk::ResponseType::Ok {
                     let text = entry.text().to_string();
                     if !text.is_empty() {
@@ -477,12 +477,12 @@ pub(crate) fn setup_toolbar(
                 unsafe { dialog.destroy(); }
             }
 
-            // 3. Ora che il popup è chiuso, riprendiamo il controllo dello stato per salvare i cambiamenti
+            
             let mut st = s.borrow_mut();
 
             if user_cancelled {
                 st.current_page_data.is_bookmarked = false;
-                drop(st); // Fondamentale chiuderlo prima di toccare di nuovo l'UI!
+                drop(st); 
                 b.set_active(false);
                 return;
             }
@@ -500,20 +500,20 @@ pub(crate) fn setup_toolbar(
 
             st.rebuild_bookmark_index();
             
-            // 4. Fondamentale rilasciare il mut prima di invalidare la listbox
+            
             drop(st); 
-            lb.invalidate_filter(); // Forza la lista ad aggiornarsi
+            lb.invalidate_filter(); 
         });
 
     }
 
-    // Registriamo la callback per aggiornare il tasto segnalibro quando si cambia pagina!
-    // Registriamo la callback per aggiornare il tasto segnalibro quando si cambia pagina!
+    
+    
     let cb_bookmark = btn_bookmark.clone();
     state.borrow_mut().update_bookmark_ui = Some(Rc::new(move |is_bk| {
         let cb = cb_bookmark.clone();
-        // Usiamo l'idle_add per ritardare l'aggiornamento visivo di qualche millisecondo,
-        // permettendo alla funzione chiamante (come switch_to_page) di rilasciare i borrow!
+        
+        
         gtk::glib::idle_add_local_once(move || {
             cb.set_active(is_bk);
         });
@@ -543,8 +543,8 @@ pub(crate) fn setup_toolbar(
                         let mut new_page = crate::models::page::PageData::new();
                         new_page.background = current_bg;
                         st.current_page_data = new_page;
-                        // st.undo_stack.clear();
-                        // st.redo_stack.clear();
+                        
+                        
                     }
                     Err(e) => eprintln!("Errore inserimento pagina: {e}"),
                 }
@@ -598,8 +598,8 @@ pub(crate) fn setup_toolbar(
                     st.current_page = new_idx;
                     st.current_page_id = new_id;
                     st.current_page_data = page_data;
-                    // st.undo_stack.clear();
-                    // st.redo_stack.clear();
+                    
+                    
                 }
                 let page_count = st.page_count;
                 let current_page = st.current_page;
@@ -624,7 +624,7 @@ pub(crate) fn setup_toolbar(
     let cb_sel = btn_tool_select.clone();
     let cb_shape = btn_tool_shape.clone();
 
-    // Creiamo una callback per aggiornare i tasti visivamente
+    
     let update_ui = Rc::new(move |tool: &Tool| {
         match tool {
             Tool::Pen => cb_pen.set_active(true),

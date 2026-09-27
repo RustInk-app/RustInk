@@ -7,8 +7,8 @@ use gtk::cairo;
 
 use serde::{Serialize, Deserialize};
 
-pub const PAGE_W: f64 = (21.0 / 2.54) * 72.0; // Esattamente 21.00 cm
-pub const PAGE_H: f64 = (29.7 / 2.54) * 72.0; // Esattamente 30.00 cm
+pub const PAGE_W: f64 = (21.0 / 2.54) * 72.0; 
+pub const PAGE_H: f64 = (29.7 / 2.54) * 72.0; 
 pub const PAGE_MARGIN: f64 = 40.0;
 pub const LINE_SPACING: f64 = 24.0;
 
@@ -76,7 +76,7 @@ pub struct PageData {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PdfPageRef {
     pub doc_id: i64,
-    pub page_index: i64, // 0-based, indice nel poppler::Document
+    pub page_index: i64, 
 }
 
 impl PageData {

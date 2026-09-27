@@ -44,7 +44,7 @@ pub fn export_native_via_cairo(
 
         let ctx = cairo::Context::new(&surface).map_err(|e| e.to_string())?;
 
-        // Nessun PDF di base: partiamo da una pagina bianca
+        
         ctx.set_source_rgb(1.0, 1.0, 1.0);
         let _ = ctx.paint();
 
@@ -67,22 +67,22 @@ fn export_via_pdf_injection(
 ) -> Result<(), String> {
     let _ = tx.send(Ok(Some((0, count))));
 
-    // 1. Troviamo il PDF originale usato come base per il documento
+    
     let row = get_pdf_document(conn, base_doc_id).map_err(|e| e.to_string())?;
     let full_path = SESSION_TEMP_DIR.path().join(&row.relative_path);
 
-    // 2. Carichiamo l'albero PDF in RAM istantaneamente (Nessun rendering!)
+    
     let mut doc = Document::load(&full_path).map_err(|e| format!("Errore lettura PDF nativo: {e}"))?;
     let pages = doc.get_pages();
 
     let image_cache = std::cell::RefCell::new(std::collections::HashMap::new());
 
-    // 3. Creiamo l'Overlay per ogni pagina annotata
+    
     for idx in 0..count {
         let page_id = page_id_at(conn, idx).map_err(|e| e.to_string())?;
         let page_data = load_page(conn, page_id).map_err(|e| e.to_string())?;
 
-        // Se la pagina non ha elementi, la saltiamo! (Massima velocità)
+        
         if page_data.components.is_empty() {
             let _ = tx.send(Ok(Some((idx + 1, count))));
             continue;
@@ -96,14 +96,14 @@ fn export_via_pdf_injection(
 
                 if let Some(&page_obj_id) = pages.get(&pdf_page_num) {
 
-                    // Trova le vere dimensioni del foglio PDF
+                    
                     let mut width = 595.0;
                     let mut height = 842.0;
 
                     if let Ok(page_dict) = doc.get_object(page_obj_id).and_then(Object::as_dict) {
                         if let Ok(media_box) = page_dict.get(b"MediaBox").and_then(Object::as_array) {
                             if media_box.len() == 4 {
-                                // Soluzione infallibile per estrarre numeri dal PDF:
+                                
                                 let get_num = |obj: &Object| -> f64 {
                                     match obj {
                                         Object::Integer(i) => *i as f64,
@@ -123,8 +123,8 @@ fn export_via_pdf_injection(
                         }
                     }
 
-                    // PREPARAZIONE DELL'OVERLAY CAIRO (Solo Annotazioni)
-                    let render_scale = 3.0; // 3x equivale a una risoluzione tipografica (molto nitida)
+                    
+                    let render_scale = 3.0; 
                     let target_w = (PAGE_W * render_scale) as i32;
                     let target_h = (PAGE_H * render_scale) as i32;
 
@@ -134,17 +134,17 @@ fn export_via_pdf_injection(
                     let ctx = cairo::Context::new(&surface).map_err(|e| e.to_string())?;
                     ctx.scale(render_scale, render_scale);
 
-                    // DISEGNO: Sfrutta Cairo per disegnare QUALSIASI componente Rastin perfettamente!
+                    
                     render_components(&ctx, &page_data, &image_cache);
-                    drop(ctx); // Forza il flush dei dati
+                    drop(ctx); 
 
-                    // ESTRAZIONE CANALI: Separiamo RGB e Trasparenza (Alpha)
+                    
                     let mut rgb = Vec::with_capacity((target_w * target_h * 3) as usize);
                     let mut alpha = Vec::with_capacity((target_w * target_h) as usize);
 
                     let data = surface.data().unwrap();
                     for chunk in data.chunks_exact(4) {
-                        // Cairo in little-endian memorizza come BGRA
+                        
                         let b = chunk[0] as u32;
                         let g = chunk[1] as u32;
                         let r = chunk[2] as u32;
@@ -154,7 +154,7 @@ fn export_via_pdf_injection(
                         if a == 0 {
                             rgb.push(255); rgb.push(255); rgb.push(255);
                         } else {
-                            // De-premoltiplica il canale alpha per i file PDF nativi
+                            
                             rgb.push((r * 255 / a) as u8);
                             rgb.push((g * 255 / a) as u8);
                             rgb.push((b * 255 / a) as u8);
@@ -162,8 +162,8 @@ fn export_via_pdf_injection(
                     }
                     drop(data);
 
-                    // INIEZIONE NEL PDF COME XOBJECT
-                    // 1. Inseriamo la Maschera di Trasparenza
+                    
+                    
                     let mut smask_dict = Dictionary::new();
                     smask_dict.set("Type", "XObject");
                     smask_dict.set("Subtype", "Image");
@@ -172,10 +172,10 @@ fn export_via_pdf_injection(
                     smask_dict.set("ColorSpace", "DeviceGray");
                     smask_dict.set("BitsPerComponent", 8);
                     let mut smask_stream = Stream::new(smask_dict, alpha);
-                    let _ = smask_stream.compress(); // Compressione ZIP nativa per non pesare
+                    let _ = smask_stream.compress(); 
                     let smask_id = doc.add_object(smask_stream);
 
-                    // 2. Inseriamo i Colori con collegamento alla maschera
+                    
                     let mut img_dict = Dictionary::new();
                     img_dict.set("Type", "XObject");
                     img_dict.set("Subtype", "Image");
@@ -191,10 +191,10 @@ fn export_via_pdf_injection(
                     let xobj_name = format!("RastinOverlay{}", idx);
                     add_xobject_to_page(&mut doc, page_obj_id, &xobj_name, img_id)?;
 
-                    // 3. "Stampiamo" l'immagine sul PDF originale
+                    
                     let content_ops = vec![
                         Operation::new("q", vec![]),
-                        // Matrice che inverte la Y per compensare il sistema coordinate Bottom-Left del PDF
+                        
                         Operation::new("cm", vec![
                             Object::Real(width as f32), Object::Integer(0),
                             Object::Integer(0), Object::Real(-height as f32),
@@ -212,7 +212,7 @@ fn export_via_pdf_injection(
         let _ = tx.send(Ok(Some((idx + 1, count))));
     }
 
-    // 4. Scrittura Pura I/O istantanea su disco
+    
     doc.save(output_path).map_err(|e| format!("Impossibile salvare il PDF elaborato: {e}"))?;
 
     Ok(())
@@ -249,7 +249,7 @@ pub fn export_document_to_pdf(
     };
 }
 
-/// Helper di basso livello per registrare in sicurezza un livello XObject all'interno del dizionario di una pagina PDF
+
 fn add_xobject_to_page(
     doc: &mut Document,
     page_id: lopdf::ObjectId,

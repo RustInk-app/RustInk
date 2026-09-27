@@ -30,7 +30,7 @@ pub fn import_pdf_background(
     start_order: i64,
 ) -> Result<(i64, usize, Option<(i64, usize)>, String), String> {
     
-    // 1. Validazione iniziale del PDF (legge solo l'header per contare le pagine)
+    
     let uri = gio::File::for_path(source_path).uri();
     let doc = poppler::Document::from_file(&uri, None)
         .map_err(|e| format!("PDF non valido o corrotto: {e}"))?;
@@ -39,13 +39,13 @@ pub fn import_pdf_background(
         return Err("Il PDF non contiene pagine".into());
     }
 
-    // 2. Creazione della cartella della sessione e copia del file in background
+    
     std::fs::create_dir_all(docs_dir()).map_err(|e| e.to_string())?;
     let uuid = uuid::Uuid::new_v4();
     let dest_filename = format!("{uuid}.pdf");
     let dest_path = docs_dir().join(&dest_filename);
     
-    // La copia fisica (operazione lenta su disco) avviene qui senza bloccare la UI
+    
     std::fs::copy(source_path, &dest_path).map_err(|e| e.to_string())?;
 
     let original_name = source_path
@@ -54,7 +54,7 @@ pub fn import_pdf_background(
         .unwrap_or_else(|| "documento.pdf".into());
     let relative_path = format!("docs/{dest_filename}");
 
-    // 3. Scrittura ottimizzata all'interno del Database
+    
     let mut conn = rusqlite::Connection::open(db_tmp_path).map_err(|e| e.to_string())?;
 
     let _ = conn.execute(
@@ -65,7 +65,7 @@ pub fn import_pdf_background(
 
     let doc_id = conn.last_insert_rowid();
 
-    // Inserimento bulk istantaneo tramite transazione
+    
     let first_id = insert_pdf_backed_pages_bulk(
         &mut conn,
         start_order,
@@ -75,7 +75,7 @@ pub fn import_pdf_background(
 
     let first_new_id = Some((first_id, start_order as usize));
 
-    // Restituiamo anche dest_filename alla UI
+    
     Ok((doc_id, n_pages as usize, first_new_id, dest_filename))
 }
 
@@ -114,7 +114,7 @@ pub fn on_import_pdf_clicked(
             }
             
             st.page_count = 0;
-            st.doc_generation += 1; // Forza il refresh del thread delle miniature
+            st.doc_generation += 1; 
             st.undo_stack.clear();
             st.redo_stack.clear();
             st.thumbnail_cache.borrow_mut().clear();
@@ -124,16 +124,16 @@ pub fn on_import_pdf_clicked(
                 None => return, 
             };
             
-            let start_order = 0; // Il PDF riparte da indice 0
+            let start_order = 0; 
             drop(st);
 
-            // Mostriamo il dialog di caricamento per non congelare lo schermo
+            
             let loading = crate::gui::utils::show_loading_dialog(window, "Importazione PDF in corso...");
             
             let (tx, rx) = std::sync::mpsc::channel();
             let path_clone = path.clone();
 
-            // Lancio del thread in background
+            
             std::thread::spawn(move || {
                 let res = import_pdf_background(&path_clone, &db_tmp_path, start_order);
                 let _ = tx.send(res);
@@ -147,7 +147,7 @@ pub fn on_import_pdf_clicked(
             let w_clone = window.clone();
             let loading_weak = loading.downgrade();
 
-            // Questo blocco viene eseguito ciclicamente sul Main Thread finché non riceve i dati
+            
             glib::idle_add_local(move || {
                 match rx.try_recv() {
                     Ok(Ok((doc_id, n_pages, first_new_id, dest_filename))) => {
@@ -157,13 +157,13 @@ pub fn on_import_pdf_clicked(
                         st.page_count += n_pages;
                         st.is_modified = true;
 
-                        // === PRENDIAMO IL DOCUMENTO POPPLER SUL MAIN THREAD ===
-                        // Costruiamo il percorso assoluto verso la cartella della sessione
+                        
+                        
                         let full_path = docs_dir().join(&dest_filename);
                         let uri = gio::File::for_path(&full_path).uri();
                         
-                        // Poppler viene caricato qui sul thread grafico: operazione istantanea
-                        // poiché l'indice del file è già strutturato e locale.
+                        
+                        
                         if let Ok(doc) = poppler::Document::from_file(&uri, None) {
                             st.pdf_cache.borrow_mut().insert(doc_id, doc);
                         } else {
@@ -233,7 +233,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
             }
             drop(st);
 
-            // Creiamo un dialog base per mostrare il progresso con i numeri di pagina
+            
             let loading_dialog = gtk::MessageDialog::new(
                 Some(window), gtk::DialogFlags::MODAL,
                 gtk::MessageType::Info, gtk::ButtonsType::None,
@@ -251,7 +251,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
             let w_clone = window.clone();
             let loading_weak = loading_dialog.downgrade();
 
-            // Aggiorniamo la GUI in modo fluido leggendo i messaggi in arrivo dal thread
+            
             glib::idle_add_local(move || {
                 match rx.try_recv() {
                     Ok(Ok(Some((corrente, totale)))) => {
@@ -265,7 +265,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
                         glib::ControlFlow::Continue
                     }
                     Ok(Ok(None)) => {
-                        // Finito con successo
+                        
                         if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
                         let success = gtk::MessageDialog::new(
                             Some(&w_clone), gtk::DialogFlags::MODAL,
@@ -277,7 +277,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
                         glib::ControlFlow::Break
                     }
                     Ok(Err(e)) => {
-                        // Si è verificato un errore
+                        
                         if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
                         let alert = gtk::MessageDialog::new(
                             Some(&w_clone), gtk::DialogFlags::MODAL,
@@ -291,7 +291,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
                     }
                     Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                     Err(_) => {
-                        // Canale disconnesso in modo inaspettato
+                        
                         if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
                         glib::ControlFlow::Break
                     }
@@ -320,7 +320,7 @@ pub(crate) fn setup_file_ops(
 
     let accel_group = gtk::AccelGroup::new();
     window.add_accel_group(&accel_group);
-    let (key, modifier) = gtk::accelerator_parse("<Primary>s"); // <Primary> si adatta in automatico a Ctrl su Windows/Linux e Cmd su Mac
+    let (key, modifier) = gtk::accelerator_parse("<Primary>s"); 
     menu_save.add_accelerator("activate", &accel_group, key, modifier, gtk::AccelFlags::VISIBLE);
 
     let menu_save_as: gtk::MenuItem = builder.object("file_save_as").unwrap();
@@ -479,12 +479,12 @@ pub(crate) fn setup_file_ops(
             eprintln!("Errore creazione nuovo doc: {}", e);
         }
         
-        // --- FIX SEGNALIBRI: Pulisce l'indice essendo un file nuovo ---
+        
         st.rebuild_bookmark_index();
         if let Some(cb) = &st.update_bookmark_ui {
-            cb(false); // Il nuovo documento parte senza preferiti nella prima pagina
+            cb(false); 
         }
-        // --------------------------------------------------------------
+        
 
         let title = st.window_title();
         drop(st);
@@ -503,7 +503,7 @@ pub(crate) fn setup_file_ops(
         if !prompt_save_if_modified() { return; }
 
         
-        // Utilizza il dialog NATIVO del sistema operativo
+        
         let open_dialog = gtk::FileChooserNative::new(
             Some("Apri documento"),
             Some(&window),
@@ -610,15 +610,15 @@ pub(crate) fn setup_file_ops(
                     import_medias(&chosen_clone, &tmp).map_err(|e| e.to_string())?;
                     let conn = rusqlite::Connection::open(&tmp).map_err(|e| e.to_string())?;
 
-                    // Se il worker delle miniature (o qualunque altra connessione residua sullo
-                    // stesso file di sessione) sta ancora rilasciando un lock, aspettiamo invece
-                    // di fallire subito con SQLITE_BUSY.
+                    
+                    
+                    
                     conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(|e| e.to_string())?;
 
-                    // Il bundle .rastin può provenire da una versione precedente dell'app
-                    // (es. prima dell'introduzione delle colonne pdf_doc_id/pdf_page_index):
-                    // eseguiamo la stessa migrazione idempotente usata per i nuovi documenti,
-                    // così i file vecchi restano apribili senza perdere il supporto PDF.
+                    
+                    
+                    
+                    
                     init_schema(&conn).map_err(|e| e.to_string())?;
 
                     let count    = page_count(&conn).map_err(|e| e.to_string())?;
@@ -650,10 +650,10 @@ pub(crate) fn setup_file_ops(
                     st.undo_stack.clear(); 
                     st.redo_stack.clear();
 
-                    // --- FIX SFONDO PDF/CACHE: il documento precedente lasciava riferimenti
-                    // e cache "sporche" (pdf_cache, pdf_surface_cache, thumbnail_cache,
-                    // image_cache), per cui la pagina non veniva mai davvero sostituita
-                    // a video (restava visibile lo sfondo/le miniature del documento vecchio).
+                    
+                    
+                    
+                    
                     st.current_pdf_ref = st.db.as_ref()
                         .and_then(|conn| get_page_pdf_ref(conn, res.first_id).ok().flatten())
                         .map(|(doc_id, page_index)| PdfPageRef { doc_id, page_index });
@@ -664,12 +664,12 @@ pub(crate) fn setup_file_ops(
                     st.pending_thumbnails.borrow_mut().clear();
                     st.image_cache.borrow_mut().clear();
 
-                    // --- FIX WORKER MINIATURE: il file di sessione ha sempre lo stesso path,
-                    // quindi il thread delle miniature non capirebbe da solo che il documento
-                    // è cambiato e continuerebbe a usare la vecchia connessione (causa di lock
-                    // e letture di dati stantii dopo l'apertura). Incrementando la generazione
-                    // e scartando le richieste già in coda (relative al documento precedente)
-                    // forziamo il worker a riconnettersi.
+                    
+                    
+                    
+                    
+                    
+                    
                     st.doc_generation += 1;
                     st.thumb_req_stack.lock().unwrap().clear();
 
@@ -677,15 +677,15 @@ pub(crate) fn setup_file_ops(
                         st.ensure_pdf_loaded(pref.doc_id);
                     }
 
-                    // --- FIX SEGNALIBRI: Ricarica l'indice dal nuovo database ---
+                    
                     st.rebuild_bookmark_index();
                     
-                    // --- FIX UI: Aggiorna il bottone se la pagina 1 è un segnalibro ---
+                    
                     let is_bk = st.current_page_data.is_bookmarked;
                     if let Some(cb) = &st.update_bookmark_ui {
                         cb(is_bk);
                     }
-                    // -------------------------------------------------------------
+                    
 
                     if let Some(ref bp) = st.bundle_path.clone() {
                         if bp.extension().and_then(|e| e.to_str()) == Some("rastin") {

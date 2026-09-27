@@ -41,7 +41,7 @@ pub(crate) fn setup_canvas_events(
         };
 
         if let Some(tool) = target_tool {
-            // Incapsuliamo la lettura per far morire il borrow subito!
+            
             let (needs_switch, current, cb) = {
                 let st = state.borrow();
                 if st.active_temp_trigger.is_none() && st.active_tool != tool {
@@ -94,31 +94,31 @@ pub(crate) fn setup_canvas_events(
             let mut st = state.borrow_mut();
             if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
                 if let ComponentPayload::RichText(ref block) = st.current_page_data.components[idx] {
-                    // Estrai il testo e lo stile originale
+                    
                     let existing_text = block.spans.iter().map(|s| s.text.clone()).collect::<String>();
                     let existing_style = block.spans.first().map(|s| s.style.clone()).unwrap_or_default();
                     
-                    drop(st); // Rilascia il borrow per permettere l'apertura del modale!
+                    drop(st); 
                     
-                    // Riapri il menù col testo esistente
+                    
                     if let Some((new_text, new_style)) = crate::models::textbox::show_text_input_dialog(&w, &existing_style, &existing_text) {
                         let mut st_mut = state.borrow_mut();
-                        let mut invalidate_id = None; // 1. Variabile temporanea
+                        let mut invalidate_id = None; 
 
                         if let ComponentPayload::RichText(ref mut b) = st_mut.current_page_data.components[idx] {
-                            // Sostituisci il blocco testo con quello nuovo modificato
+                            
                             b.spans = vec![TextSpan { text: new_text, style: new_style }];
                             
-                            // 2. Salviamo l'ID
+                            
                             invalidate_id = Some(format!("txt_{}", b.id_temporaneo));
                         }
 
-                        // 3. Fuori dall'if, il componente non è più "preso in prestito"
+                        
                         if let Some(id) = invalidate_id {
                             st_mut.image_cache.borrow_mut().remove(&id);
                         }
                     }
-                    return Propagation::Stop; // Ferma il flusso del click standard
+                    return Propagation::Stop; 
                 }
             }
         }
@@ -206,8 +206,8 @@ pub(crate) fn setup_canvas_events(
                         if !st.selected_indices.contains(&idx) {
                             st.selected_indices = vec![idx];
                         }
-                        // Sincronizza selected_index col nuovo contenuto di selected_indices,
-                        // altrimenti resta "appeso" a un valore vecchio (es. da un paste precedente)
+                        
+                        
                         st.selected_index = if st.selected_indices.len() == 1 {
                             Some(st.selected_indices[0])
                         } else {
@@ -229,7 +229,7 @@ pub(crate) fn setup_canvas_events(
                         st.drag_mode = DragMode::Move { start_px: px, start_py: py, orig_positions };
                     } else {
                         st.selected_indices.clear();
-                        st.selected_index = None; // <-- aggiunta: sincronizza anche qui
+                        st.selected_index = None; 
                         st.drag_mode = DragMode::Marquee { start_px: px, start_py: py, current_px: px, current_py: py };
                     }
                 }
@@ -303,8 +303,8 @@ pub(crate) fn setup_canvas_events(
                     let mut st = s.borrow_mut();
                     st.drag_mode = DragMode::Marquee { start_px, start_py, current_px: px, current_py: py };
                     st.selected_indices = hit_test_marquee(&st.current_page_data, start_px, start_py, px, py);
-                    // Sincronizza anche qui, altrimenti dopo un rubber-band su un solo
-                    // elemento selected_index resterebbe quello di una selezione precedente
+                    
+                    
                     st.selected_index = if st.selected_indices.len() == 1 {
                         Some(st.selected_indices[0])
                     } else {
@@ -416,7 +416,7 @@ pub(crate) fn setup_canvas_events(
             
             let btn_trigger = EventTrigger::Mouse(button);
             
-            // Verifichiamo la condizione bloccandola in uno scope ristretto
+            
             let should_restore = {
                 let st = s.borrow();
                 st.active_temp_trigger.as_ref() == Some(&btn_trigger)
@@ -530,8 +530,8 @@ pub(crate) fn setup_canvas_events(
 
                         st.is_modified = true;
                         
-                        // st.undo_stack.clear();
-                        // st.redo_stack.clear();
+                        
+                        
 
                         let title = st.window_title();
                         st.drag_mode = DragMode::None;
@@ -561,8 +561,8 @@ pub(crate) fn setup_canvas_events(
                         }
                         
                         st.is_modified = true;
-                        // st.undo_stack.clear();
-                        // st.redo_stack.clear();
+                        
+                        
 
                         let title = st.window_title();
                         st.drag_mode = DragMode::None;
@@ -615,8 +615,8 @@ pub(crate) fn setup_canvas_events(
                     );
                 }
                 st.is_modified = true;
-                // st.undo_stack.clear();
-                // st.redo_stack.clear();
+                
+                
 
                 let title = st.window_title();
                 drop(st);
@@ -671,7 +671,7 @@ pub(crate) fn setup_canvas_events(
                 (st.current_page, st.page_count)
             };
 
-            // Esploriamo i parent per trovare la barra nativa GTK della ScrolledWindow
+            
             let mut vadj = None;
             let mut current_parent = canvas_widget.parent();
             while let Some(widget) = current_parent {
@@ -686,31 +686,31 @@ pub(crate) fn setup_canvas_events(
                 let at_bottom = adj.value() + adj.page_size() >= adj.upper() - 1.0;
                 let at_top = adj.value() <= adj.lower() + 1.0;
 
-                // Se la barra nativa batte contro il fondo e l'utente scorre giù -> Prossima pagina
+                
                 if zoom <= 1.0 || (delta_y > 0.0 && at_bottom) {
                     if delta_y > 0.0 && cur + 1 < count {
                         let _ = s.borrow_mut().switch_to_page(cur + 1);
                         { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
-                        adj.set_value(adj.lower()); // Resetta la barra in cima alla nuova pagina
+                        adj.set_value(adj.lower()); 
                         c.queue_draw();
                         return Propagation::Stop;
                     }
                 }
                 
-                // Se la barra batte contro la cima e l'utente scorre su -> Pagina precedente
+                
                 if zoom <= 1.0 || (delta_y < 0.0 && at_top) {
                     if delta_y < 0.0 && cur > 0 {
                         let _ = s.borrow_mut().switch_to_page(cur - 1);
                         { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
-                        adj.set_value(adj.upper() - adj.page_size()); // Metti la barra in fondo alla pagina ripristinata
+                        adj.set_value(adj.upper() - adj.page_size()); 
                         c.queue_draw();
                         return Propagation::Stop;
                     }
                 }
             }
 
-            // SE NON C'È DA CAMBIARE PAGINA:
-            // Procediamo! Lasciamo che GTK scorra la rotellina in perfetta sincronia con l'UI!
+            
+            
             Propagation::Proceed
         });
     }

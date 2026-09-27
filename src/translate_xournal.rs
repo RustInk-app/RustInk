@@ -47,9 +47,9 @@ impl From<std::io::Error> for XoppError {
     }
 }
 
-/// Una pagina importata da un file .xopp, già nel linguaggio del nuovo
-/// modello RASTIN a componenti (pronta per essere scritta in `pages` +
-/// `base_layers` senza ulteriori conversioni).
+
+
+
 pub struct XoppPage {
     pub background: PaperBackground,
     pub components: Vec<ComponentPayload>,
@@ -59,8 +59,8 @@ pub fn import_xopp(path: &Path) -> Result<Vec<XoppPage>, XoppError> {
     let file = std::fs::File::open(path)?;
     let gz = flate2::read::GzDecoder::new(file);
     
-    // OTT. 1: Invece di caricare l'intero GZ in una String in RAM, passiamo 
-    // un buffer al parser per processare il file progressivamente (Streaming).
+    
+    
     let reader = std::io::BufReader::new(gz);
     parse_xopp_xml(reader)
 }
@@ -82,16 +82,16 @@ fn parse_xopp_xml<R: std::io::BufRead>(reader: R) -> Result<Vec<XoppPage>, XoppE
     let mut pages: Vec<XoppPage> = Vec::new();
     let mut state = ParseState::Root;
 
-    // Dimensioni della pagina xopp corrente, per calcolare il fattore di scala
+    
     let mut src_w: f64 = PAGE_W;
     let mut src_h: f64 = PAGE_H;
 
-    // --- Stato temporaneo per <stroke> ---
+    
     let mut stroke_color = Color::black();
     let mut stroke_width: f64 = 1.41;
     let mut stroke_text = String::new();
 
-    // --- Stato temporaneo per <text> ---
+    
     let mut text_x: f64 = 0.0;
     let mut text_y: f64 = 0.0;
     let mut text_size: f64 = 12.0;
@@ -339,7 +339,7 @@ fn decode_and_save_image(
     src_h: f64,
 ) -> Result<ComponentPayload, XoppError> {
     
-    // OTT. 2: Sostituisce l'iteratore (che allocava in continuazione) con la funzione nativa di string replacement
+    
     let clean = base64_data.replace(|c: char| c.is_whitespace(), "");
     
     let raw = base64::engine::general_purpose::STANDARD
@@ -355,8 +355,8 @@ fn decode_and_save_image(
     let fname = format!("{}.webp", uuid::Uuid::new_v4());
     let dest = media_dir.join(&fname);
 
-    // OTT. 3: Usiamo la funzione ad alto livello .save_with_format, come nel resto del programma.
-    // Delegare l'encoding alla libreria base evita colli di bottiglia causati dalla forzatura manuale del codec lossless puro.
+    
+    
     decoded
         .save_with_format(&dest, image::ImageFormat::WebP)
         .map_err(|e| XoppError::Image(format!("encoding webp fallito: {e}")))?;

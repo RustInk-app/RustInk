@@ -4,7 +4,7 @@ use RASTIN::save_handler::db::{init_schema, load_page, encode_payload_list};
 use RASTIN::save_handler::database_utilities::append_active_component;
 use rusqlite::Connection;
 
-/// Helper per preparare un database di test in RAM
+
 fn setup_memory_db() -> (Connection, i64) {
     let conn = Connection::open_in_memory().expect("Impossibile aprire DB in memoria");
     init_schema(&conn).expect("Init schema fallito");
@@ -25,7 +25,7 @@ fn setup_memory_db() -> (Connection, i64) {
 fn test_all_shapes_roundtrip() {
     let (conn, page_id) = setup_memory_db();
 
-    // Elenco di tutte le shape supportate dall'enum ShapeKind
+    
     let shapes_to_test = vec![
         (ShapeKind::Rectangle, "Rettangolo"),
         (ShapeKind::Ellipse, "Ellisse"),
@@ -34,7 +34,7 @@ fn test_all_shapes_roundtrip() {
         (ShapeKind::Line, "Linea Retta"),
     ];
 
-    // Inseriamo tutte le shape sulla stessa pagina di test con parametri differenti
+    
     for (i, (kind, name)) in shapes_to_test.into_iter().enumerate() {
         let offset = (i as f64) * 50.0;
         let shape_block = ShapeBlock {
@@ -43,8 +43,8 @@ fn test_all_shapes_roundtrip() {
             y1: 20.0 + offset,
             x2: 110.0 + offset,
             y2: 120.0 + offset,
-            color: Color::new(0.1, 0.2, 0.3), // Colore custom
-            width: 3.5,                       // Spessore personalizzato
+            color: Color::new(0.1, 0.2, 0.3), 
+            width: 3.5,                       
         };
 
         let payload = ComponentPayload::Shape(shape_block);
@@ -52,13 +52,13 @@ fn test_all_shapes_roundtrip() {
         assert!(result.is_ok(), "Fallimento nel salvataggio della shape: {}", name);
     }
 
-    // Ricarichiamo la pagina dal database simulando l'apertura del file .rastin
+    
     let page = load_page(&conn, page_id).expect("Errore nel caricamento della pagina con le shape");
 
-    // Verifichiamo che siano state salvate tutte e 5
+    
     assert_eq!(page.components.len(), 5, "Non tutte le shape sono state salvate nel DB.");
 
-    // Controlliamo l'integrità dei dati per ciascuna shape caricata
+    
     let expected_kinds = vec![
         ShapeKind::Rectangle,
         ShapeKind::Ellipse,

@@ -7,7 +7,7 @@ fn main() {
 
     let app = Application::builder()
         .application_id("com.github.rastin.app")
-        // Allow multiple instance
+        
         .flags(gio::ApplicationFlags::NON_UNIQUE)
         .build();
 

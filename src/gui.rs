@@ -68,7 +68,7 @@ pub fn build_ui(app: &gtk::Application) {
                     st.paper_background = first_page.background.clone();
                     st.current_page_data = first_page;
                     st.bundle_path = original_bundle.clone();
-                    st.is_modified = true; // recuperato ma non ancora ri-salvato nel file originale
+                    st.is_modified = true; 
                     st.db_tmp_path = Some(tmp);
                     st.db = Some(conn);
                     st.undo_stack.clear();
@@ -81,7 +81,7 @@ pub fn build_ui(app: &gtk::Application) {
                     }
                     drop(st);
 
-                    // Il backup è stato importato: la vecchia cartella di sessione crashata può sparire
+                    
                     clear_old_sessions();
                 }
                 Err(e) => {
@@ -111,10 +111,10 @@ pub fn build_ui(app: &gtk::Application) {
 
     let icon_path = "src/ui/icons/rastin_logo.png";
     if let Ok(icon) = gtk::gdk_pixbuf::Pixbuf::from_file(icon_path) {
-        // Questa vuole l'Option, quindi le passiamo Some()
+        
         window.set_icon(Some(&icon));
         
-        // Questa vuole il riferimento diretto, quindi glielo diamo senza Some!
+        
         gtk::Window::set_default_icon(&icon);
     } else {
         eprintln!("[UI] Attenzione: Impossibile caricare il logo da {}", icon_path);
@@ -132,15 +132,15 @@ pub fn build_ui(app: &gtk::Application) {
         | gtk::gdk::EventMask::SCROLL_MASK,
     );
 
-    // Navigate from a page to another
+    
     let spin_page: gtk::SpinButton = builder.object("spin_page").expect("spin_page non trovato");
 
     let lbl_tot: gtk::Label = builder.object("lbl_tot").expect("lbl_tot non trovato");
 
-    // zoom_adj tracks Zoom slider
+    
     let zoom_adj: gtk::Adjustment = builder.object("zoom_adj").expect("zoom_adj non trovato");
     
-    // zoom_pct outputs zoom_adj value
+    
     let zoom_pct: gtk::Label = builder
         .object("lbl_zoom_pct")
         .expect("lbl_zoom_pct non trovato");
@@ -154,7 +154,7 @@ pub fn build_ui(app: &gtk::Application) {
             {
                 let mut st = s.borrow_mut();
                 st.zoom = zoom;
-                // st.scroll_offset_y = 0.0;
+                
             }
             zp.set_text(&format!("{:.0}%", zoom * 100.0));
             c.queue_draw();
@@ -208,7 +208,7 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     let menu_pref: gtk::MenuItem = builder.object("file_preferences").unwrap();
     let dialog: gtk::Dialog = builder.object("preferences_dialog").unwrap();
 
-    // Fix per la macro clone!: specifichiamo @default-return
+    
     dialog.connect_delete_event(clone!(@weak dialog => @default-return Propagation::Stop, move |_, _| {
         dialog.hide();
         Propagation::Stop
@@ -279,7 +279,7 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
             let trig1 = trigger1.borrow().clone();
             let trig2 = trigger2.borrow().clone();
 
-            // Validazione: stesso tasto ma tool differenti
+            
             if trig1.is_some() && trig1 == trig2 && t1 != t2 {
                 let alert = gtk::MessageDialog::new(
                     Some(&dialog),
@@ -344,16 +344,16 @@ fn setup_menus(
         .object("sidebar_container")
         .expect("Box sidebar mancante");
 
-    // 1. Impediamo a window.show_all() di forzare l'apertura
+    
     sidebar_container.set_no_show_all(true);
     
-    // 2. FIX: Spegniamo FISICAMENTE la sidebar ignorando il file Glade
+    
     sidebar_container.set_visible(false);
     
-    // 3. Sincronizziamo la spunta del menu per farla corrispondere
+    
     view_sidebar.set_active(false);
 
-    // 4. Colleghiamo il segnale per i click futuri
+    
     view_sidebar.connect_toggled(glib::clone!(@weak sidebar_container => move |item| {
         sidebar_container.set_visible(item.is_active());
     }));
