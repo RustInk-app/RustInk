@@ -194,7 +194,7 @@ impl AppState {
             rusqlite::params![page_id, encode_payload_list(&[])],
         )?;
 
-        eprintln!("[DB] Nuovo documento: path={:?}, page_id={}", tmp, page_id);
+        eprintln!("New document created: path={:?}, page_id={}", tmp, page_id);
 
         self.page_count = 1;
         self.current_page = 0;
@@ -295,7 +295,7 @@ impl AppState {
         let uri = gio::File::for_path(&full_path).uri();
         match poppler::Document::from_file(&uri, None) {
             Ok(doc) => { self.pdf_cache.borrow_mut().insert(doc_id, doc); }
-            Err(e) => eprintln!("[PDF] Impossibile caricare {:?}: {e}", full_path),
+            Err(e) => eprintln!("Unable to load PDF {:?}: {e}", full_path),
         }
     }
 
@@ -309,7 +309,7 @@ impl AppState {
                     self.is_modified = true;
                     self.thumbnail_cache.borrow_mut().remove(&self.current_page);
                 }
-                Err(e) => eprintln!("[DB] ERRORE append_active_component: {e}"),
+                Err(e) => eprintln!("Error in append_active_component: {e}"),
             }
         }
     }
@@ -328,7 +328,7 @@ impl AppState {
             self.is_modified = true;
             self.thumbnail_cache.borrow_mut().remove(&self.current_page);
             self.reload_current_page();
-            eprintln!("[UNDO] Ripristinato stato precedente");
+            eprintln!("Restored from last file auto-saved");
         }
     }
 
@@ -345,7 +345,7 @@ impl AppState {
             self.is_modified = true;
             self.thumbnail_cache.borrow_mut().remove(&self.current_page);
             self.reload_current_page();
-            eprintln!("[REDO] Ripristinato stato successivo");
+            eprintln!("Restored from last file auto-saved");
         }
     }
 
@@ -376,7 +376,7 @@ impl AppState {
         if let Some(conn) = &self.db {
             match load_page(conn, self.current_page_id) {
                 Ok(pd) => self.current_page_data = pd,
-                Err(e) => eprintln!("[DB] ERRORE reload_current_page: {e}"),
+                Err(e) => eprintln!("Error in reload_current_page: {e}"),
             }
         }
     }
@@ -393,7 +393,7 @@ impl AppState {
                 true
             }
             Err(e) => {
-                eprintln!("[LOCK] impossibile creare il lock: {e}");
+                eprintln!("Unable to create scheduling lock: {e}");
                 true
             }
         }

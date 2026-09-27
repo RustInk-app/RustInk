@@ -24,7 +24,7 @@ pub(crate) fn setup_toolbar(
     lbl_tot: &gtk::Label,
     page_listbox: &gtk::ListBox,
 ) -> (gtk::Button, gtk::Button) {
-    let tool_bar: gtk::Toolbar = builder.object("toolbar").expect("Toolbar non trovata");
+    let tool_bar: gtk::Toolbar = builder.object("toolbar").expect("Toolbar not found");
 
     macro_rules! add_item {
         ($widget:expr) => {
@@ -58,17 +58,17 @@ pub(crate) fn setup_toolbar(
         btn
     };
 
-    let btn_save = make_btn("document-save.svg", "Salva il documento (.rastin)");
-    let btn_open = make_btn("document-open.svg", "Apri documento");
+    let btn_save = make_btn("document-save.svg", "Save document (.rastin)");
+    let btn_open = make_btn("document-open.svg", "Open document");
     add_item!(&btn_save);
     add_item!(&btn_open);
     add_sep!();
 
-    let btn_tool_pen = make_toggle("tool-pencil.svg", "Penna");
-    let btn_tool_eraser = make_toggle("tool-eraser.svg", "Gomma");
-    let btn_tool_text = make_toggle("tool-text.svg", "Testo");
-    let btn_tool_select = make_toggle("select-rect.svg", "Seleziona");
-    let btn_tool_shape = make_toggle("tool-shape.svg", "Forme");
+    let btn_tool_pen = make_toggle("tool-pencil.svg", "Pen");
+    let btn_tool_eraser = make_toggle("tool-eraser.svg", "Eraser");
+    let btn_tool_text = make_toggle("tool-text.svg", "Text");
+    let btn_tool_select = make_toggle("select-rect.svg", "Selection");
+    let btn_tool_shape = make_toggle("tool-shape.svg", "Shapes");
     btn_tool_pen.set_active(true);
 
     {
@@ -132,11 +132,11 @@ pub(crate) fn setup_toolbar(
     }
     let shape_menu = gtk::Menu::new();
     let shape_items: [(ShapeKind, &str); 5] = [
-        (ShapeKind::Rectangle, "Disegna Rettangolo"),
-        (ShapeKind::Ellipse, "Disegna Ellisse"),
-        (ShapeKind::Arrow, "Disegna Freccia"),
-        (ShapeKind::DoubleArrow, "Disegna Doppia Freccia"),
-        (ShapeKind::Line, "Disegna Linea Retta"),
+        (ShapeKind::Rectangle, "Draw Rectangle"),
+        (ShapeKind::Ellipse, "Draw Ellipse"),
+        (ShapeKind::Arrow, "Draw Arrow"),
+        (ShapeKind::DoubleArrow, "Draw Double Arrow"),
+        (ShapeKind::Line, "Draw Line"),
     ];
     for (kind, label) in shape_items {
         let item = gtk::MenuItem::with_label(label);
@@ -177,12 +177,12 @@ pub(crate) fn setup_toolbar(
     add_sep!();
 
     let preset_colors = vec![
-        (Color::new(0.0, 0.0, 0.0), "Nero"),
-        (Color::new(0.85, 0.15, 0.15), "Rosso"),
-        (Color::new(0.15, 0.35, 0.85), "Blu"),
-        (Color::new(0.1, 0.65, 0.2), "Verde"),
-        (Color::new(0.95, 0.6, 0.05), "Arancione"),
-        (Color::new(0.55, 0.15, 0.75), "Viola"),
+        (Color::new(0.0, 0.0, 0.0), "Black"),
+        (Color::new(0.85, 0.15, 0.15), "Red"),
+        (Color::new(0.15, 0.35, 0.85), "Blue"),
+        (Color::new(0.1, 0.65, 0.2), "Green"),
+        (Color::new(0.95, 0.6, 0.05), "Orange"),
+        (Color::new(0.55, 0.15, 0.75), "Purple"),
     ];
 
     let mut color_toggles = Vec::new();
@@ -298,7 +298,7 @@ pub(crate) fn setup_toolbar(
         let all_toggles = color_toggles.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>();
         
         btn_custom_color.connect_clicked(move |_| {
-            let dialog = gtk::ColorChooserDialog::new(Some("Scegli un colore"), Some(&w));
+            let dialog = gtk::ColorChooserDialog::new(Some("Choose a color"), Some(&w));
             if dialog.run() == gtk::ResponseType::Ok {
                 let rgba = dialog.rgba();
                 let new_c = Color::new(rgba.red(), rgba.green(), rgba.blue());
@@ -366,9 +366,9 @@ pub(crate) fn setup_toolbar(
     add_item!(&btn_custom_color);
     add_sep!();
     
-    let btn_thin = make_toggle("thickness-fine.svg", "Sottile");
-    let btn_med = make_toggle("thickness-medium.svg", "Medio");
-    let btn_thick = make_toggle("thickness-thick.svg", "Grande");
+    let btn_thin = make_toggle("thickness-fine.svg", "Thin");
+    let btn_med = make_toggle("thickness-medium.svg", "Medium");
+    let btn_thick = make_toggle("thickness-thick.svg", "Thick");
     btn_med.set_active(true);
 
     {
@@ -411,15 +411,15 @@ pub(crate) fn setup_toolbar(
     add_item!(&btn_med);
     add_item!(&btn_thick);
 
-    let btn_add_page = make_btn("page-add.svg", "Aggiungi nuova pagina");
+    let btn_add_page = make_btn("page-add.svg", "Add new page");
     
     let btn_bookmark = gtk::ToggleButton::new();
     btn_bookmark.set_image(Some(&gtk::Image::from_icon_name(Some("bookmark-new"), gtk::IconSize::Button)));
-    btn_bookmark.set_tooltip_text(Some("Imposta/Rimuovi Segnalibro"));
+    btn_bookmark.set_tooltip_text(Some("Add/Remove bookmarks"));
     btn_bookmark.set_always_show_image(true);
     btn_bookmark.set_relief(gtk::ReliefStyle::None);
 
-    let btn_del_page = make_btn("page-delete.svg", "Elimina pagina corrente");
+    let btn_del_page = make_btn("page-delete.svg", "Delete current page");
 
     {
         let s = state.clone();
@@ -449,14 +449,14 @@ pub(crate) fn setup_toolbar(
             
             if is_active {
                 let dialog = gtk::Dialog::with_buttons(
-                    Some("Nuovo Segnalibro"),
+                    Some("New bookmark"),
                     Some(&w),
                     gtk::DialogFlags::MODAL,
-                    &[("Annulla", gtk::ResponseType::Cancel), ("Salva", gtk::ResponseType::Ok)],
+                    &[("Cancel", gtk::ResponseType::Cancel), ("Save", gtk::ResponseType::Ok)],
                 );
                 let content_area = dialog.content_area();
                 let entry = gtk::Entry::new();
-                entry.set_placeholder_text(Some("Inserisci un nome (opzionale)"));
+                entry.set_placeholder_text(Some("Add a name (optional)"));
                 entry.set_margin_top(10);
                 entry.set_margin_bottom(10);
                 entry.set_margin_start(10);
@@ -546,7 +546,7 @@ pub(crate) fn setup_toolbar(
                         
                         
                     }
-                    Err(e) => eprintln!("Errore inserimento pagina: {e}"),
+                    Err(e) => eprintln!("Error adding page: {e}"),
                 }
             }
 
@@ -559,7 +559,7 @@ pub(crate) fn setup_toolbar(
             drop(st);
             sp.set_range(1.0, page_count as f64);
             sp.set_value((current_page + 1) as f64);
-            lt.set_text(&format!("di {}", page_count));
+            lt.set_text(&format!("of {}", page_count));
             c.queue_draw();
             refresh_sidebar(&s, &lb, &c, &sp, &lt);
         });
@@ -611,7 +611,7 @@ pub(crate) fn setup_toolbar(
                 drop(st);
                 sp.set_range(1.0, page_count as f64);
                 sp.set_value((current_page + 1) as f64);
-                lt.set_text(&format!("di {}", page_count));
+                lt.set_text(&format!("of {}", page_count));
                 refresh_sidebar(&s, &lb, &c, &sp, &lt);
             }
             c.queue_draw();

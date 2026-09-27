@@ -36,7 +36,7 @@ impl std::fmt::Display for XoppError {
         match self {
             XoppError::Io(e) => write!(f, "I/O: {e}"),
             XoppError::Xml(s) => write!(f, "XML: {s}"),
-            XoppError::Image(s) => write!(f, "Immagine: {s}"),
+            XoppError::Image(s) => write!(f, "IMG: {s}"),
         }
     }
 }
@@ -105,7 +105,7 @@ fn parse_xopp_xml<R: std::io::BufRead>(reader: R) -> Result<Vec<XoppPage>, XoppE
             Ok(Event::Start(ref e)) => match e.name().as_ref() {
                 b"page" => {
                     if state != ParseState::Root {
-                        return Err(XoppError::Xml("<page> annidato inaspettato".into()));
+                        return Err(XoppError::Xml("<page> tag error".into()));
                     }
                     src_w = attr_f64(e, b"width").unwrap_or(PAGE_W);
                     src_h = attr_f64(e, b"height").unwrap_or(PAGE_H);
@@ -223,7 +223,7 @@ fn parse_xopp_xml<R: std::io::BufRead>(reader: R) -> Result<Vec<XoppPage>, XoppE
                                 page.components.push(payload);
                             }
                         }
-                        Err(e) => eprintln!("[XOPP] Immagine ignorata: {e}"),
+                        Err(e) => eprintln!("[XOPP] Image ignored: {e}"),
                     }
                     state = ParseState::InLayer;
                 }
@@ -344,10 +344,10 @@ fn decode_and_save_image(
     
     let raw = base64::engine::general_purpose::STANDARD
         .decode(&clean)
-        .map_err(|e| XoppError::Image(format!("base64 non valido: {e}")))?;
+        .map_err(|e| XoppError::Image(format!("Base64 not valid: {e}")))?;
 
     let decoded = image::load_from_memory(&raw)
-        .map_err(|e| XoppError::Image(format!("formato immagine non supportato: {e}")))?;
+        .map_err(|e| XoppError::Image(format!("Image format not supported: {e}")))?;
 
     let media_dir = media_dir();
     std::fs::create_dir_all(&media_dir).map_err(XoppError::Io)?;
@@ -359,7 +359,7 @@ fn decode_and_save_image(
     
     decoded
         .save_with_format(&dest, image::ImageFormat::WebP)
-        .map_err(|e| XoppError::Image(format!("encoding webp fallito: {e}")))?;
+        .map_err(|e| XoppError::Image(format!("Webp encoding failed: {e}")))?;
 
     let sx = PAGE_W / src_w;
     let sy = PAGE_H / src_h;

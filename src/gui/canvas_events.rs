@@ -500,7 +500,7 @@ pub(crate) fn setup_canvas_events(
                             
                             let alert = gtk::MessageDialog::new(
                                 Some(&w), gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::Ok,
-                                "Non puoi spostare elementi fuori dai bordi della pagina!",
+                                "You cannot drag and drop outside page!",
                             );
                             alert.run();
                             unsafe { alert.destroy(); }
@@ -690,7 +690,7 @@ pub(crate) fn setup_canvas_events(
                 if zoom <= 1.0 || (delta_y > 0.0 && at_bottom) {
                     if delta_y > 0.0 && cur + 1 < count {
                         let _ = s.borrow_mut().switch_to_page(cur + 1);
-                        { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
+                        { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("of {}", st.page_count)); }
                         adj.set_value(adj.lower()); 
                         c.queue_draw();
                         return Propagation::Stop;
@@ -701,7 +701,7 @@ pub(crate) fn setup_canvas_events(
                 if zoom <= 1.0 || (delta_y < 0.0 && at_top) {
                     if delta_y < 0.0 && cur > 0 {
                         let _ = s.borrow_mut().switch_to_page(cur - 1);
-                        { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("di {}", st.page_count)); }
+                        { let st = s.borrow(); sp.set_range(1.0, st.page_count as f64); sp.set_value((st.current_page + 1) as f64); lt.set_text(&format!("of {}", st.page_count)); }
                         adj.set_value(adj.upper() - adj.page_size()); 
                         c.queue_draw();
                         return Propagation::Stop;

@@ -11,17 +11,17 @@ pub static SESSION_TEMP_DIR: LazyLock<TempDir> = LazyLock::new(|| {
         .prefix("rastin-")
         .rand_bytes(8)
         .tempdir()
-        .expect("Impossibile creare la cartella temporanea della sessione");
+        .expect("Error creating temp folder for session");
 
     let _ = std::fs::create_dir_all(dir.path().join("media"));
     let _ = std::fs::create_dir_all(dir.path().join("backup"));
     let _ = std::fs::create_dir_all(dir.path().join("docs"));
 
     let lock_path = dir.path().join("session.lock");
-    let lock_file = File::create(lock_path).expect("Impossibile creare lockfile");
+    let lock_file = File::create(lock_path).expect("Unable to create lockfile");
     lock_file
         .try_lock_exclusive()
-        .expect("Impossibile bloccare la sessione");
+        .expect("Unable to block session");
 
     Box::leak(Box::new(lock_file));
 
@@ -29,7 +29,7 @@ pub static SESSION_TEMP_DIR: LazyLock<TempDir> = LazyLock::new(|| {
 });
 
 pub fn temp_db_dir() -> PathBuf {
-    SESSION_TEMP_DIR.path().join("struttura.sqlite")
+    SESSION_TEMP_DIR.path().join("RustInk.sqlite")
 }
 
 pub fn media_dir() -> PathBuf {

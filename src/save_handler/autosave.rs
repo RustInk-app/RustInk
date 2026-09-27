@@ -29,12 +29,10 @@ pub fn clear_old_sessions() {
                     let lock_path = p.join("session.lock");
                     if let Ok(file) = File::open(&lock_path) {
                         if file.try_lock_exclusive().is_err() {
-                            eprintln!("[CLEANUP] Ignoro {:?} perché l'istanza è viva", p);
                             continue;
                         }
                     }
 
-                    eprintln!("[CLEANUP] Rimuovo vecchia cartella di sessione: {:?}", p);
                     let _ = std::fs::remove_dir_all(&p);
                 }
             }
@@ -77,7 +75,7 @@ pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {
     }
 
     if all_backups.is_empty() {
-        eprintln!("[RECOVERY] Nessun backup precedente trovato.");
+        eprintln!("No previous backup found.");
         clear_old_sessions();
         return None;
     }
@@ -89,7 +87,7 @@ pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {
     });
 
     let (latest_backup, backup_dir) = all_backups.into_iter().last()?;
-    eprintln!("[RECOVERY] Backup più recente trovato: {:?}", latest_backup);
+    eprintln!("Found last backup: {:?}", latest_backup);
 
     let sentinel_path = backup_dir.join("last_session.txt");
     let sentinel = std::fs::read_to_string(sentinel_path).ok();
@@ -100,19 +98,17 @@ pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {
     let dialog = gtk::MessageDialog::builder()
         .message_type(gtk::MessageType::Question)
         .buttons(gtk::ButtonsType::YesNo)
-        .text("Recupero Sessione")
-        .secondary_text("È stato trovato un salvataggio non ripristinato. Vuoi recuperarlo?")
+        .text("Recovery session")
+        .secondary_text("An unrestored save file was found. Do you want to recover it?")
         .build();
 
     let response = dialog.run();
     dialog.close();
 
     if response == gtk::ResponseType::Yes {
-        println!("Recupero confermato per: {:?}", latest_backup);
         
         Some((latest_backup, original))
     } else {
-        println!("Recupero annullato dall'utente.");
         clear_old_sessions(); 
         None
     }

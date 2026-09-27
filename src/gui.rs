@@ -85,16 +85,16 @@ pub fn build_ui(app: &gtk::Application) {
                     clear_old_sessions();
                 }
                 Err(e) => {
-                    eprintln!("[RECOVERY] Errore import backup: {e}");
+                    eprintln!("Error importing backup: {e}");
                     if let Err(e) = state.borrow_mut().init_new_document() {
-                        eprintln!("Errore inizializzazione DB: {e}");
+                        eprintln!("Error initializing file format #1: {e}");
                     }
                 }
             }
         }
         None => {
             if let Err(e) = state.borrow_mut().init_new_document() {
-                eprintln!("Errore inizializzazione DB: {e}");
+                eprintln!("Error initializing file format #2: {e}");
             }
         }
     }
@@ -117,14 +117,14 @@ pub fn build_ui(app: &gtk::Application) {
         
         gtk::Window::set_default_icon(&icon);
     } else {
-        eprintln!("[UI] Attenzione: Impossibile caricare il logo da {}", icon_path);
+        eprintln!("[UI] Unable to load logo {}", icon_path);
     }
     
     utils::load_css();
 
     let canvas: gtk::DrawingArea = builder
         .object("first_panel_drawing_area")
-        .expect("canvas non trovato");
+        .expect("canvas not found");
     canvas.add_events(
         gtk::gdk::EventMask::BUTTON_PRESS_MASK
         | gtk::gdk::EventMask::BUTTON_RELEASE_MASK
@@ -133,17 +133,17 @@ pub fn build_ui(app: &gtk::Application) {
     );
 
     
-    let spin_page: gtk::SpinButton = builder.object("spin_page").expect("spin_page non trovato");
+    let spin_page: gtk::SpinButton = builder.object("spin_page").expect("spin_page not found");
 
-    let lbl_tot: gtk::Label = builder.object("lbl_tot").expect("lbl_tot non trovato");
+    let lbl_tot: gtk::Label = builder.object("lbl_tot").expect("lbl_tot not found");
 
     
-    let zoom_adj: gtk::Adjustment = builder.object("zoom_adj").expect("zoom_adj non trovato");
+    let zoom_adj: gtk::Adjustment = builder.object("zoom_adj").expect("zoom_adj not found");
     
     
     let zoom_pct: gtk::Label = builder
         .object("lbl_zoom_pct")
-        .expect("lbl_zoom_pct non trovato");
+        .expect("lbl_zoom_pct not found");
 
     {
         let s = state.clone();
@@ -218,20 +218,20 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     let combo2: gtk::ComboBoxText = builder.object("choice_tool_second_button").unwrap();
     let box1: gtk::ButtonBox = builder.object("first_button_event_listener").unwrap();
     let box2: gtk::ButtonBox = builder.object("second_button_event_listener").unwrap();
-    let btn_ok: gtk::Button = builder.object("btn_pref_ok").expect("OK non trovato");
-    let btn_cancel: gtk::Button = builder.object("btn_pref_cancel").expect("Cancel non trovato");
+    let btn_ok: gtk::Button = builder.object("btn_pref_ok").expect("Ok button not found");
+    let btn_cancel: gtk::Button = builder.object("btn_pref_cancel").expect("Cancel button not found");
 
     btn_cancel.connect_clicked(clone!(@weak dialog => move |_| {
         dialog.hide();
     }));
 
-    for tool_name in &["Nessuno", "Penna", "Gomma", "Testo", "Seleziona"] {
+    for tool_name in &["None", "Pen", "Eraser", "Text", "Selection"] {
         combo1.append_text(tool_name);
         combo2.append_text(tool_name);
     }
 
-    let btn_key1 = gtk::Button::with_label("Clicca e premi un tasto...");
-    let btn_key2 = gtk::Button::with_label("Clicca e premi un tasto...");
+    let btn_key1 = gtk::Button::with_label("Click and press a key...");
+    let btn_key2 = gtk::Button::with_label("Click and press a key...");
     btn_key1.set_size_request(180, -1);
     btn_key2.set_size_request(180, -1);
     box1.add(&btn_key1);
@@ -241,10 +241,10 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     let trigger2 = Rc::new(RefCell::new(None::<EventTrigger>));
 
     let setup_listener = |btn: &gtk::Button, trigger_ref: Rc<RefCell<Option<EventTrigger>>>| {
-        btn.connect_clicked(|b| b.set_label("In ascolto..."));
+        btn.connect_clicked(|b| b.set_label("press a key..."));
 
         btn.connect_key_press_event(clone!(@strong trigger_ref => move |b, ev| {
-            let name = ev.keyval().name().unwrap_or_else(|| "Sconosciuto".into());
+            let name = ev.keyval().name().unwrap_or_else(|| "Unknown".into());
             b.set_label(&name);
             *trigger_ref.borrow_mut() = Some(EventTrigger::Key(name.to_string()));
             Propagation::Stop
@@ -267,10 +267,10 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     btn_ok.connect_clicked(
         clone!(@weak dialog, @strong state, @weak combo1, @weak combo2, @strong trigger1, @strong trigger2 => move |_| {
             let map_tool = |txt: Option<String>| match txt.as_deref() {
-                Some("Penna") => Some(crate::models::page::Tool::Pen),
-                Some("Gomma") => Some(crate::models::page::Tool::Eraser),
-                Some("Testo") => Some(crate::models::page::Tool::Text),
-                Some("Seleziona") => Some(crate::models::page::Tool::Select),
+                Some("Pen") => Some(crate::models::page::Tool::Pen),
+                Some("Eraser") => Some(crate::models::page::Tool::Eraser),
+                Some("Text") => Some(crate::models::page::Tool::Text),
+                Some("Selection") => Some(crate::models::page::Tool::Select),
                 _ => None,
             };
 
@@ -286,9 +286,9 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
                     gtk::DialogFlags::MODAL,
                     gtk::MessageType::Warning,
                     gtk::ButtonsType::Ok,
-                    "Conflitto di scorciatoie",
+                    "Error keybindings",
                 );
-                alert.set_secondary_text(Some("Hai assegnato lo stesso tasto a due strumenti differenti. Scegli strumenti uguali o tasti diversi per procedere."));
+                alert.set_secondary_text(Some("Already assigned to another button."));
                 alert.run();
                 unsafe { alert.destroy(); }
                 return;
@@ -320,7 +320,7 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         let format_trigger = |t: &Option<EventTrigger>| match t {
             Some(EventTrigger::Mouse(b)) => format!("Mouse Button {}", b),
             Some(EventTrigger::Key(k)) => k.clone(),
-            None => "Clicca e premi un tasto...".to_string(),
+            None => "Click and press a key...".to_string(),
         };
         btn_key1.set_label(&format_trigger(&st.pref_trigger_1));
         btn_key2.set_label(&format_trigger(&st.pref_trigger_2));
@@ -342,7 +342,7 @@ fn setup_menus(
     
     let sidebar_container: gtk::Box = builder
         .object("sidebar_container")
-        .expect("Box sidebar mancante");
+        .expect("Box sidebar not found");
 
     
     sidebar_container.set_no_show_all(true);
@@ -360,7 +360,7 @@ fn setup_menus(
 
     let btn_close_sidebar: gtk::Button = builder
         .object("btn_close_sidebar")
-        .expect("Tasto X non trovato");
+        .expect("X button not found");
     btn_close_sidebar.connect_clicked(glib::clone!(@weak view_sidebar => move |_| {
         view_sidebar.set_active(false);
     }));

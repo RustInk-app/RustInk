@@ -33,10 +33,10 @@ pub fn import_pdf_background(
     
     let uri = gio::File::for_path(source_path).uri();
     let doc = poppler::Document::from_file(&uri, None)
-        .map_err(|e| format!("PDF non valido o corrotto: {e}"))?;
+        .map_err(|e| format!("invalid/corrupted PDF : {e}"))?;
     let n_pages = doc.n_pages();
     if n_pages <= 0 {
-        return Err("Il PDF non contiene pagine".into());
+        return Err("The PDF doesn't contain any pages".into());
     }
 
     
@@ -51,7 +51,7 @@ pub fn import_pdf_background(
     let original_name = source_path
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "documento.pdf".into());
+        .unwrap_or_else(|| "document.pdf".into());
     let relative_path = format!("docs/{dest_filename}");
 
     
@@ -89,18 +89,18 @@ pub fn on_import_pdf_clicked(
     page_listbox: &gtk::ListBox,
 ) {
     let dialog = gtk::FileChooserDialog::new(
-        Some("Importa PDF"),
+        Some("Import PDF"),
         Some(window),
         gtk::FileChooserAction::Open,
     );
     dialog.add_buttons(&[
-        ("Annulla", gtk::ResponseType::Cancel),
-        ("Importa", gtk::ResponseType::Accept),
+        ("Cancel", gtk::ResponseType::Cancel),
+        ("Import", gtk::ResponseType::Accept),
     ]);
 
     let filter = gtk::FileFilter::new();
     filter.add_pattern("*.pdf");
-    filter.set_name(Some("Documenti PDF"));
+    filter.set_name(Some("PDF Documents"));
     dialog.add_filter(filter);
 
     if dialog.run() == gtk::ResponseType::Accept {
@@ -128,7 +128,7 @@ pub fn on_import_pdf_clicked(
             drop(st);
 
             
-            let loading = crate::gui::utils::show_loading_dialog(window, "Importazione PDF in corso...");
+            let loading = crate::gui::utils::show_loading_dialog(window, "Importing PDF...");
             
             let (tx, rx) = std::sync::mpsc::channel();
             let path_clone = path.clone();
@@ -167,7 +167,7 @@ pub fn on_import_pdf_clicked(
                         if let Ok(doc) = poppler::Document::from_file(&uri, None) {
                             st.pdf_cache.borrow_mut().insert(doc_id, doc);
                         } else {
-                            eprintln!("[PDF-CACHE] Errore critico nel caricamento del file copiato in cache.");
+                            eprintln!("Error loading PDF #1.");
                         }
 
                         if let Some((_id, idx)) = first_new_id {
@@ -186,7 +186,7 @@ pub fn on_import_pdf_clicked(
                     Ok(Err(e)) => {
                         if let Some(ld) = loading_weak.upgrade() { unsafe { ld.destroy(); } }
                         let alert = gtk::MessageDialog::new(
-                            Some(&w_clone), gtk::DialogFlags::MODAL, gtk::MessageType::Error, gtk::ButtonsType::Ok, "Errore importazione PDF"
+                            Some(&w_clone), gtk::DialogFlags::MODAL, gtk::MessageType::Error, gtk::ButtonsType::Ok, "Error importing PDF #2"
                         );
                         alert.set_secondary_text(Some(&e));
                         alert.run();
@@ -208,15 +208,15 @@ pub fn on_import_pdf_clicked(
 
 pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>) {
     let dialog = gtk::FileChooserDialog::new(
-        Some("Esporta PDF"),
+        Some("Export PDF"),
         Some(window),
         gtk::FileChooserAction::Save,
     );
     dialog.add_buttons(&[
-        ("Annulla", gtk::ResponseType::Cancel),
-        ("Esporta", gtk::ResponseType::Accept),
+        ("Cancel", gtk::ResponseType::Cancel),
+        ("Export", gtk::ResponseType::Accept),
     ]);
-    dialog.set_current_name("documento_annotato.pdf");
+    dialog.set_current_name("test_document.pdf");
 
     if dialog.run() == gtk::ResponseType::Accept {
         if let Some(path) = dialog.filename() {
@@ -237,7 +237,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
             let loading_dialog = gtk::MessageDialog::new(
                 Some(window), gtk::DialogFlags::MODAL,
                 gtk::MessageType::Info, gtk::ButtonsType::None,
-                "Esportazione PDF in corso...\nInizializzazione...",
+                "PDF exporting...",
             );
             loading_dialog.show_all();
 
@@ -257,9 +257,9 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
                     Ok(Ok(Some((corrente, totale)))) => {
                         if let Some(ld) = loading_weak.upgrade() {
                             if corrente == totale {
-                                ld.set_text(Some("Esportazione PDF in corso...\nFase Finale: Unione dei blocchi..."));
+                                ld.set_text(Some("PDF exported!"));
                             } else {
-                                ld.set_text(Some(&format!("Esportazione PDF in corso...\nElaborazione pagina {} di {}", corrente, totale)));
+                                ld.set_text(Some(&format!("Exporting PDF...\n Loaded {} on {} pages", corrente, totale)));
                             }
                         }
                         glib::ControlFlow::Continue
@@ -270,7 +270,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
                         let success = gtk::MessageDialog::new(
                             Some(&w_clone), gtk::DialogFlags::MODAL,
                             gtk::MessageType::Info, gtk::ButtonsType::Ok,
-                            "Esportazione completata con successo!",
+                            "Export completed!",
                         );
                         success.run();
                         unsafe { success.destroy(); }
@@ -282,7 +282,7 @@ pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>
                         let alert = gtk::MessageDialog::new(
                             Some(&w_clone), gtk::DialogFlags::MODAL,
                             gtk::MessageType::Error, gtk::ButtonsType::Ok,
-                            "Errore esportazione",
+                            "Error export PDF",
                         );
                         alert.set_secondary_text(Some(&e));
                         alert.run();
@@ -338,7 +338,7 @@ pub(crate) fn setup_file_ops(
             }
         }
 
-        let loading = show_loading_dialog(&window, "Salvataggio in corso…");
+        let loading = show_loading_dialog(&window, "Saving in progress...");
         let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let path_clone = target_path.clone();
 
@@ -368,7 +368,7 @@ pub(crate) fn setup_file_ops(
                         clear_old_sessions();
                         write_autosave_sentinel(Some(&target_path));
                     } else if let Err(e) = result {
-                        eprintln!("[DB] ERRORE salvataggio: {e}");
+                        eprintln!("Error saving #1: {e}");
                     }
                     glib::ControlFlow::Break
                 }
@@ -387,11 +387,11 @@ pub(crate) fn setup_file_ops(
         let confirm = gtk::MessageDialog::new(
             Some(&window), gtk::DialogFlags::MODAL, gtk::MessageType::Question,
             gtk::ButtonsType::None,
-            "Hai modifiche non salvate. Vuoi salvare prima di procedere?",
+            "You have unsaved changes. Do you want to save before proceeding??",
         );
-        confirm.add_button("Annulla", gtk::ResponseType::Cancel);
-        confirm.add_button("Non salvare", gtk::ResponseType::No);
-        confirm.add_button("Salva", gtk::ResponseType::Yes);
+        confirm.add_button("Cancel", gtk::ResponseType::Cancel);
+        confirm.add_button("Don't save", gtk::ResponseType::No);
+        confirm.add_button("Save", gtk::ResponseType::Yes);
         let resp = confirm.run();
         unsafe { confirm.destroy(); }
 
@@ -399,12 +399,12 @@ pub(crate) fn setup_file_ops(
             gtk::ResponseType::Cancel => false,
             gtk::ResponseType::No => true,
             gtk::ResponseType::Yes => {
-                let dialog = gtk::FileChooserDialog::new(Some("Salva documento"), Some(&window), gtk::FileChooserAction::Save);
-                dialog.add_button("Annulla", gtk::ResponseType::Cancel);
-                dialog.add_button("Salva", gtk::ResponseType::Accept);
+                let dialog = gtk::FileChooserDialog::new(Some("Save document"), Some(&window), gtk::FileChooserAction::Save);
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                dialog.add_button("Save", gtk::ResponseType::Accept);
                 dialog.set_do_overwrite_confirmation(true);
                 if let Some(p) = state.borrow().bundle_path.clone() { dialog.set_filename(p); }
-                else { dialog.set_current_name("documento.rastin"); }
+                else { dialog.set_current_name("document.rastin"); }
                 let f = gtk::FileFilter::new(); f.set_name(Some("RASTIN (*.rastin)")); f.add_pattern("*.rastin"); dialog.add_filter(f);
 
                 let res = dialog.run();
@@ -431,12 +431,12 @@ pub(crate) fn setup_file_ops(
     });
 
     let do_save_as = clone!(@strong state, @strong window, @strong execute_save_background => move || {
-        let dialog = gtk::FileChooserDialog::new(Some("Salva con nome"), Some(&window), gtk::FileChooserAction::Save);
-        dialog.add_button("Annulla", gtk::ResponseType::Cancel);
-        dialog.add_button("Salva", gtk::ResponseType::Accept);
+        let dialog = gtk::FileChooserDialog::new(Some("Save with name"), Some(&window), gtk::FileChooserAction::Save);
+        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+        dialog.add_button("Save", gtk::ResponseType::Accept);
         dialog.set_do_overwrite_confirmation(true);
         if let Some(p) = state.borrow().bundle_path.clone() { dialog.set_filename(p); }
-        else { dialog.set_current_name("documento.rastin"); }
+        else { dialog.set_current_name("document.rastin"); }
         let f = gtk::FileFilter::new(); f.set_name(Some("RASTIN (*.rastin)")); f.add_pattern("*.rastin"); dialog.add_filter(f);
 
         let res = dialog.run();
@@ -476,7 +476,7 @@ pub(crate) fn setup_file_ops(
         }
 
         if let Err(e) = st.init_new_document() {
-            eprintln!("Errore creazione nuovo doc: {}", e);
+            eprintln!("Error creating new document: {}", e);
         }
         
         
@@ -492,7 +492,7 @@ pub(crate) fn setup_file_ops(
         window.set_title(&title);
         spin_page.set_range(1.0, 1.0);
         spin_page.set_value(1.0);
-        lbl_tot.set_text("di 1");
+        lbl_tot.set_text("of 1");
         refresh_sidebar(&state, &page_listbox, &canvas, &spin_page, &lbl_tot);
         canvas.queue_draw();
     });
@@ -505,11 +505,11 @@ pub(crate) fn setup_file_ops(
         
         
         let open_dialog = gtk::FileChooserNative::new(
-            Some("Apri documento"),
+            Some("Open document"),
             Some(&window),
             gtk::FileChooserAction::Open,
-            Some("Apri"),
-            Some("Annulla"),
+            Some("Open"),
+            Some("Cancel"),
         );
 
         let f1 = gtk::FileFilter::new(); 
@@ -523,7 +523,7 @@ pub(crate) fn setup_file_ops(
         open_dialog.add_filter(f2);
 
         let f3 = gtk::FileFilter::new(); 
-        f3.set_name(Some("Tutti i supportati")); 
+        f3.set_name(Some("All supported")); 
         f3.add_pattern("*.rastin"); 
         f3.add_pattern("*.xopp"); 
         open_dialog.add_filter(f3);
@@ -543,7 +543,7 @@ pub(crate) fn setup_file_ops(
             if lock_file.exists() {
                 let dlg = gtk::MessageDialog::new(
                     Some(&window), gtk::DialogFlags::MODAL, gtk::MessageType::Error, gtk::ButtonsType::Ok,
-                    &format!("Il file è già aperto in un'altra istanza:\n{}\n\nChiudi l'altra istanza prima di aprirlo.", chosen.display()),
+                    &format!("The file is already opened in another window:\n{}\n\nClose the other window before opening a new one", chosen.display()),
                 );
                 dlg.run(); unsafe { dlg.destroy(); }
                 return;
@@ -564,7 +564,7 @@ pub(crate) fn setup_file_ops(
         }
 
         let tmp = temp_db_dir();
-        let loading = show_loading_dialog(&window, "Apertura documento in corso…");
+        let loading = show_loading_dialog(&window, "Opening document…");
 
         pub struct OpenResult {
             page_count: usize, first_id: i64, first_page: PageData, conn: rusqlite::Connection, bundle_path: Option<PathBuf>, tmp: PathBuf,
@@ -696,14 +696,14 @@ pub(crate) fn setup_file_ops(
 
                     sp_clone.set_range(1.0, page_count as f64);
                     sp_clone.set_value((current_page + 1) as f64);
-                    lt_clone.set_text(&format!("di {}", page_count));
+                    lt_clone.set_text(&format!("of {}", page_count));
                     w_clone.set_title(&title);
                     refresh_sidebar(&s_clone, &lb_clone, &c_clone, &sp_clone, &lt_clone);
                     c_clone.queue_draw();
                     glib::ControlFlow::Break
                 }
                 Ok(Err(e)) => {
-                    eprintln!("[DB] Errore apertura: {e}");
+                    eprintln!("Error opening: {e}");
                     if let Some(ld) = lw.upgrade() { unsafe { ld.destroy(); } }
                     glib::ControlFlow::Break
                 }
@@ -729,8 +729,6 @@ pub(crate) fn setup_file_ops(
         file_import_pdf.connect_activate(move |_| {
             on_import_pdf_clicked(&w, &s, &c, &sp, &lt, &pl);
         });
-    } else {
-        eprintln!("[UI] Voce di menu 'file_import_pdf' non trovata nel glade — import PDF non collegato");
     }
 
     if let Some(file_export_pdf) = builder.object::<gtk::MenuItem>("file_export_pdf") {
@@ -739,8 +737,6 @@ pub(crate) fn setup_file_ops(
         file_export_pdf.connect_activate(move |_| {
             on_export_pdf_clicked(&w, &s);
         });
-    } else {
-        eprintln!("[UI] Voce di menu 'file_export_pdf' non trovata nel glade — export PDF non collegato");
     }
 }
 
@@ -760,8 +756,8 @@ pub(crate) fn setup_autosave(state: &Rc<RefCell<AppState>>) {
                 }
             }
             std::thread::spawn(move || match export_medias(&tmp, &dest) {
-                Ok(_) => eprintln!("[AUTOSAVE] Backup salvato in {:?}", dest),
-                Err(e) => eprintln!("[AUTOSAVE] Errore: {e}"),
+                Ok(_) => eprintln!("Backup saved in {:?}", dest),
+                Err(e) => eprintln!("Error auto-save: {e}"),
             });
             write_autosave_sentinel(bundle_path.as_ref());
             let mut backups: Vec<PathBuf> = std::fs::read_dir(autosave_path())
@@ -791,11 +787,11 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
                 gtk::DialogFlags::MODAL,
                 gtk::MessageType::Warning,
                 gtk::ButtonsType::None,
-                "Hai modifiche non salvate. Vuoi salvare prima di uscire?",
+                "You have unsaved changes. Do you want to save before proceeding??",
             );
-            dialog.add_button("Esci senza salvare", gtk::ResponseType::No);
-            dialog.add_button("Annulla", gtk::ResponseType::Cancel);
-            let btn_save = dialog.add_button("Salva", gtk::ResponseType::Yes);
+            dialog.add_button("Exit without saving", gtk::ResponseType::No);
+            dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+            let btn_save = dialog.add_button("Save", gtk::ResponseType::Yes);
             btn_save.style_context().add_class("suggested-action");
             dialog.set_default_response(gtk::ResponseType::Yes);
 
@@ -808,12 +804,12 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
                 gtk::ResponseType::Cancel => return Propagation::Stop,
                 gtk::ResponseType::Yes => {
                     let save_dialog = gtk::FileChooserDialog::new(
-                        Some("Salva documento"),
+                        Some("Save document"),
                         Some(&w),
                         gtk::FileChooserAction::Save,
                     );
-                    save_dialog.add_button("Annulla", gtk::ResponseType::Cancel);
-                    save_dialog.add_button("Salva", gtk::ResponseType::Accept);
+                    save_dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                    save_dialog.add_button("Save", gtk::ResponseType::Accept);
                     save_dialog.set_do_overwrite_confirmation(true);
                     let filter = gtk::FileFilter::new();
                     filter.set_name(Some("RASTIN (*.rastin)"));
@@ -823,7 +819,7 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
                     if let Some(p) = s.borrow().bundle_path.clone() {
                         save_dialog.set_filename(p);
                     } else {
-                        save_dialog.set_current_name("documento.rastin");
+                        save_dialog.set_current_name("document.rastin");
                     }
 
                     let save_resp = save_dialog.run();
@@ -846,8 +842,8 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
                                 }
                             }
                             match export_medias(&tmp, &path) {
-                                Ok(_) => eprintln!("[CHIUSURA] Salvato in {:?}", path),
-                                Err(e) => eprintln!("[CHIUSURA] ERRORE salvataggio: {e}"),
+                                Ok(_) => eprintln!("Saved in {:?}", path),
+                                Err(e) => eprintln!("Error saving #5: {e}"),
                             }
                         }
                     }

@@ -110,7 +110,7 @@ pub fn show_format_error_dialog(parent: &gtk::Window) {
         gtk::DialogFlags::MODAL,
         gtk::MessageType::Error,
         gtk::ButtonsType::Ok,
-        "Formato non supportato",
+        "Format not supported",
     );
     dialog.set_secondary_text(Some(
         "Puoi incollare solo immagini nei formati JPEG o PNG.\n\

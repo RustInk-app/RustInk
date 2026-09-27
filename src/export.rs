@@ -34,7 +34,7 @@ pub fn export_native_via_cairo(
     let _ = tx.send(Ok(Some((0, count))));
 
     let surface = cairo::PdfSurface::new(PAGE_W, PAGE_H, output_path)
-        .map_err(|e| format!("Impossibile creare il PDF: {e}"))?;
+        .map_err(|e| format!("Unable to create PDF: {e}"))?;
 
     let image_cache = std::cell::RefCell::new(std::collections::HashMap::new());
 
@@ -72,7 +72,7 @@ fn export_via_pdf_injection(
     let full_path = SESSION_TEMP_DIR.path().join(&row.relative_path);
 
     
-    let mut doc = Document::load(&full_path).map_err(|e| format!("Errore lettura PDF nativo: {e}"))?;
+    let mut doc = Document::load(&full_path).map_err(|e| format!("Error reading PDF: {e}"))?;
     let pages = doc.get_pages();
 
     let image_cache = std::cell::RefCell::new(std::collections::HashMap::new());
@@ -213,7 +213,7 @@ fn export_via_pdf_injection(
     }
 
     
-    doc.save(output_path).map_err(|e| format!("Impossibile salvare il PDF elaborato: {e}"))?;
+    doc.save(output_path).map_err(|e| format!("Unable to save PDF: {e}"))?;
 
     Ok(())
 }
@@ -227,7 +227,7 @@ pub fn export_document_to_pdf(
         let conn = rusqlite::Connection::open_with_flags(
             db_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI
-        ).map_err(|e| format!("Errore apertura DB: {e}"))?;
+        ).map_err(|e| format!("Error opening file format: {e}"))?;
 
         let count = page_count(&conn).map_err(|e| e.to_string())? as usize;
         if count == 0 { return Ok(()); }
@@ -257,7 +257,7 @@ fn add_xobject_to_page(
     xobj_id: lopdf::ObjectId,
 ) -> Result<(), String> {
     let page_dict = doc.get_object_mut(page_id).and_then(Object::as_dict_mut)
-        .map_err(|_| "Pagina non trovata nell'albero")?;
+        .map_err(|_| "Page not found")?;
     
     if !page_dict.has(b"Resources") {
         page_dict.set("Resources", Dictionary::new());
@@ -277,7 +277,7 @@ fn add_xobject_to_page(
         }
         Object::Reference(ref_id) => {
             let dict = doc.get_object_mut(ref_id).and_then(Object::as_dict_mut)
-                .map_err(|_| "Oggetto Resources non trovato")?;
+                .map_err(|_| "'Resources' Object not found")?;
             if !dict.has(b"XObject") {
                 dict.set("XObject", Dictionary::new());
             }
@@ -285,7 +285,7 @@ fn add_xobject_to_page(
                 xobj_dict.set(xobj_name.as_bytes().to_vec(), Object::Reference(xobj_id));
             }
         }
-        _ => return Err("Dizionario Resources non supportato".into()),
+        _ => return Err("'Resources' dictionary not supported".into()),
     }
     Ok(())
 }

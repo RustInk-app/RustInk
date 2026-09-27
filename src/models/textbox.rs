@@ -170,10 +170,10 @@ pub fn show_text_input_dialog(
     let dialog = gtk::Dialog::new();
     dialog.set_transient_for(Some(parent));
     dialog.set_modal(true);
-    dialog.set_title("Inserisci testo");
+    dialog.set_title("Add text");
     dialog.set_default_size(480, 320);
  
-    dialog.add_button("Annulla", gtk::ResponseType::Cancel);
+    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
     dialog.set_default_response(gtk::ResponseType::Ok);
  
     let content = dialog.content_area();
@@ -192,7 +192,7 @@ pub fn show_text_input_dialog(
     
     
     let combo_font = gtk::ComboBoxText::with_entry();
-    combo_font.set_tooltip_text(Some("Cerca o seleziona un font"));
+    combo_font.set_tooltip_text(Some("Search or select a font"));
 
     
     let pango_ctx = dialog.pango_context();
@@ -214,9 +214,9 @@ pub fn show_text_input_dialog(
     
     let entry_font = combo_font
         .child()
-        .expect("ComboBoxText non ha un child")
+        .expect("ComboBoxText doesn't have a child")
         .downcast::<gtk::Entry>()
-        .expect("Il child non è una Entry");
+        .expect("child isn't an entry");
         
     entry_font.set_text(&default_style.font_family);
     entry_font.set_width_chars(12);
@@ -248,18 +248,18 @@ pub fn show_text_input_dialog(
     let lbl_size = gtk::Label::new(Some("Dim:"));
     let spin_size = gtk::SpinButton::with_range(6.0, 144.0, 1.0);
     spin_size.set_value(default_style.size);
-    spin_size.set_tooltip_text(Some("Dimensione in punti"));
+    spin_size.set_tooltip_text(Some("Size in points"));
     spin_size.set_width_chars(5);
  
     
     let chk_bold = gtk::CheckButton::with_label("G");
     chk_bold.set_active(default_style.bold);
-    chk_bold.set_tooltip_text(Some("Grassetto"));
+    chk_bold.set_tooltip_text(Some("Bold"));
  
     
     let chk_italic = gtk::CheckButton::with_label("I");
     chk_italic.set_active(default_style.italic);
-    chk_italic.set_tooltip_text(Some("Corsivo"));
+    chk_italic.set_tooltip_text(Some("Italic"));
  
     
     let color_cell = gtk::DrawingArea::new();
@@ -281,14 +281,14 @@ pub fn show_text_input_dialog(
         });
     }
     let btn_color = gtk::Button::new();
-    btn_color.set_tooltip_text(Some("Scegli colore testo"));
+    btn_color.set_tooltip_text(Some("Choose a color text"));
     btn_color.add(&color_cell);
     {
         let cc  = chosen_color.clone();
         let ca  = color_cell.clone();
         let dlg = dialog.clone();
         btn_color.connect_clicked(move |_| {
-            let cd = gtk::ColorChooserDialog::new(Some("color::Colore testo"), Some(&dlg));
+            let cd = gtk::ColorChooserDialog::new(Some("color::Text color"), Some(&dlg));
             let cur = cc.borrow();
             cd.set_rgba(&gdk::RGBA::new(cur.r, cur.g, cur.b, 1.0));
             drop(cur);
@@ -351,7 +351,7 @@ pub fn show_text_input_dialog(
     content.pack_start(&scrolled_text, true, true, 0);
  
     
-    let lbl_hint = gtk::Label::new(Some("Ctrl+Invio per confermare"));
+    let lbl_hint = gtk::Label::new(Some("Ctrl+Enter to confirm"));
     lbl_hint.set_halign(gtk::Align::End);
     {
         let ctx = lbl_hint.style_context();

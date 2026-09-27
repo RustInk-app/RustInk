@@ -20,7 +20,7 @@ use crate::models::page::*;
 
 use crate::save_handler::autosave_utilities::*;
 
-const DB_ENTRY: &str = "struttura.sqlite";
+const DB_ENTRY: &str = "RustInk.sqlite";
 
 
 

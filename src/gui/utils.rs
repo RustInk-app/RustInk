@@ -65,7 +65,7 @@ pub fn load_icon(filename: &str) -> gtk::Image {
     if let Ok(pixbuf) = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 24, 24, true) {
         gtk::Image::from_pixbuf(Some(&pixbuf))
     } else {
-        eprintln!("[WARNING] Icona non trovata: {}", path);
+        eprintln!("Icon not found: {}", path);
         gtk::Image::from_icon_name(Some("image-missing"), gtk::IconSize::Menu)
     }
 }

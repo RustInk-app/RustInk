@@ -217,7 +217,7 @@ pub(crate) fn setup_keyboard_shortcuts(
                         let ih_orig = img.height() as f64;
 
                         if let Err(e) = img.save_with_format(&webp_path, image::ImageFormat::WebP) {
-                            eprintln!("[PASTE] Errore salvataggio WebP: {e}");
+                            eprintln!("Error copying webp image: {e}");
                             return Propagation::Stop;
                         }
 

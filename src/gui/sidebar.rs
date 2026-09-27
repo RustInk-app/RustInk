@@ -33,14 +33,14 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         row:selected { background-color: #4a90d9; color: white; } 
     ";
     if let Err(e) = css_provider.load_from_data(dark_css) {
-        eprintln!("Errore nel caricamento del CSS della sidebar: {}", e);
+        eprintln!("Error loading sidebar's CSS: {}", e);
     }
     page_listbox.style_context().add_provider(&css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
     sidebar_scrolled.add(&page_listbox);
 
     
     let search_entry = gtk::SearchEntry::new();
-    search_entry.set_placeholder_text(Some("Cerca nei segnalibri..."));
+    search_entry.set_placeholder_text(Some("Search in bookmarks..."));
     search_entry.set_margin_start(8);
     search_entry.set_margin_end(8);
     search_entry.set_margin_bottom(8);
@@ -230,7 +230,7 @@ pub fn refresh_sidebar(
         thumb_canvas.set_size_request(100, 140); 
         
         
-        let mut page_label = format!("Pagina {}", i + 1);
+        let mut page_label = format!("Page {}", i + 1);
         let mut is_bk = false;
         let mut current_page_id = -1;
 
@@ -296,7 +296,7 @@ pub fn refresh_sidebar(
         
         if is_bk {
             let btn_rm = gtk::Button::from_icon_name(Some("edit-delete-symbolic"), gtk::IconSize::Button);
-            btn_rm.set_tooltip_text(Some("Rimuovi dai Segnalibri"));
+            btn_rm.set_tooltip_text(Some("Remove from bookmarks"));
             btn_rm.set_relief(gtk::ReliefStyle::None);
             
             let s_rm = state.clone(); let lb_rm = listbox.clone(); let c_rm = canvas.clone();
@@ -383,7 +383,7 @@ pub fn refresh_sidebar(
             } else if event.button() == 3 {
                 let menu = gtk::Menu::new();
                 
-                let item_up = gtk::MenuItem::with_label("Inserisci pagina sopra");
+                let item_up = gtk::MenuItem::with_label("Add page above");
                 let s1 = s_menu.clone(); let lb1 = lb_menu.clone(); let c1 = c_menu.clone();
                 let sp1 = sp_menu.clone(); let lt1 = lt_menu.clone();
                 item_up.connect_activate(move |_| {
@@ -400,11 +400,11 @@ pub fn refresh_sidebar(
                     st.doc_generation += 1;
 
                     let pc = st.page_count; let cur = st.current_page; drop(st);
-                    sp1.set_range(1.0, pc as f64); sp1.set_value((cur + 1) as f64); lt1.set_text(&format!("di {}", pc));
+                    sp1.set_range(1.0, pc as f64); sp1.set_value((cur + 1) as f64); lt1.set_text(&format!("of {}", pc));
                     refresh_sidebar(&s1, &lb1, &c1, &sp1, &lt1);
                 });
 
-                let item_down = gtk::MenuItem::with_label("Inserisci pagina sotto");
+                let item_down = gtk::MenuItem::with_label("Add page bottom");
                 let s2 = s_menu.clone(); let lb2 = lb_menu.clone(); let c2 = c_menu.clone();
                 let sp2 = sp_menu.clone(); let lt2 = lt_menu.clone();
                 item_down.connect_activate(move |_| {
@@ -421,11 +421,11 @@ pub fn refresh_sidebar(
                     st.doc_generation += 1;
 
                     let pc = st.page_count; let cur = st.current_page; drop(st);
-                    sp2.set_range(1.0, pc as f64); sp2.set_value((cur + 1) as f64); lt2.set_text(&format!("di {}", pc));
+                    sp2.set_range(1.0, pc as f64); sp2.set_value((cur + 1) as f64); lt2.set_text(&format!("of {}", pc));
                     refresh_sidebar(&s2, &lb2, &c2, &sp2, &lt2);
                 });
 
-                let item_move_up = gtk::MenuItem::with_label("Sposta su");
+                let item_move_up = gtk::MenuItem::with_label("Move up");
                 let s4 = s_menu.clone(); let lb4 = lb_menu.clone(); let c4 = c_menu.clone();
                 let sp4 = sp_menu.clone(); let lt4 = lt_menu.clone();
                 item_move_up.set_sensitive(i > 0);
@@ -451,12 +451,12 @@ pub fn refresh_sidebar(
                     st.doc_generation += 1;
 
                     let pc = st.page_count; let cur = st.current_page; drop(st);
-                    sp4.set_range(1.0, pc as f64); sp4.set_value((cur + 1) as f64); lt4.set_text(&format!("di {}", pc));
+                    sp4.set_range(1.0, pc as f64); sp4.set_value((cur + 1) as f64); lt4.set_text(&format!("of {}", pc));
                     refresh_sidebar(&s4, &lb4, &c4, &sp4, &lt4);
                     c4.queue_draw();
                 });
 
-                let item_move_down = gtk::MenuItem::with_label("Sposta giù");
+                let item_move_down = gtk::MenuItem::with_label("Move down");
                 let s5 = s_menu.clone(); let lb5 = lb_menu.clone(); let c5 = c_menu.clone();
                 let sp5 = sp_menu.clone(); let lt5 = lt_menu.clone();
                 let page_count_now = s_menu.borrow().page_count;
@@ -483,12 +483,12 @@ pub fn refresh_sidebar(
                     st.doc_generation += 1;
 
                     let pc = st.page_count; let cur = st.current_page; drop(st);
-                    sp5.set_range(1.0, pc as f64); sp5.set_value((cur + 1) as f64); lt5.set_text(&format!("di {}", pc));
+                    sp5.set_range(1.0, pc as f64); sp5.set_value((cur + 1) as f64); lt5.set_text(&format!("of {}", pc));
                     refresh_sidebar(&s5, &lb5, &c5, &sp5, &lt5);
                     c5.queue_draw();
                 });
 
-                let item_delete = gtk::MenuItem::with_label("Elimina pagina");
+                let item_delete = gtk::MenuItem::with_label("Delete page");
                 let s3 = s_menu.clone(); let lb3 = lb_menu.clone(); let c3 = c_menu.clone();
                 let sp3 = sp_menu.clone(); let lt3 = lt_menu.clone();
                 item_delete.connect_activate(move |_| {
@@ -511,7 +511,7 @@ pub fn refresh_sidebar(
                         st.doc_generation += 1;
 
                         let pc = st.page_count; let c_page = st.current_page; drop(st);
-                        sp3.set_range(1.0, pc as f64); sp3.set_value((c_page + 1) as f64); lt3.set_text(&format!("di {}", pc));
+                        sp3.set_range(1.0, pc as f64); sp3.set_value((c_page + 1) as f64); lt3.set_text(&format!("of {}", pc));
                         refresh_sidebar(&s3, &lb3, &c3, &sp3, &lt3);
                         c3.queue_draw();
                     }

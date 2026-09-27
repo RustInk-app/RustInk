@@ -229,7 +229,7 @@ pub fn draw_pdf_background(
         let target_h = (PAGE_H * render_scale) as i32;
 
         let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, target_w, target_h)
-            .expect("Impossibile creare la superficie PDF cacheata");
+            .expect("Unable to create PDF surface");
 
         let ctx = cairo::Context::new(&surface).unwrap();
         ctx.set_source_rgb(1.0, 1.0, 1.0);
