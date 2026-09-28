@@ -1,4 +1,4 @@
-name: Build and Release RustInk
+name: Build and Release RustInk Installers
 
 on:
   push:
@@ -15,16 +15,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          
           - os: windows-latest
             target: x86_64-pc-windows-gnu
-            artifact_name: rustInk-windows.exe
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: rustInk-linux
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: rustInk-macos-arm64
 
     steps:
       - name: Checkout repository
@@ -39,12 +35,11 @@ jobs:
           update: true
           path-type: inherit
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-gtk3
-            mingw-w64-x86_64-poppler
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-poppler
 
-      
       - name: Install Linux Dependencies
         if: runner.os == 'Linux'
         run: |
@@ -53,7 +48,6 @@ jobs:
             libxcb-shape0-dev libxcb-xfixes0-dev libgtk-3-dev libwayland-dev \
             libxkbcommon-dev libfontconfig1-dev libpoppler-glib-dev
 
-      
       - name: Install macOS Dependencies
         if: runner.os == 'macOS'
         run: brew install gtk+3 poppler pkg-config
@@ -64,30 +58,45 @@ jobs:
           targets: ${{ matrix.target }}
 
       
-      - name: Build release binary (Windows)
+      - name: Build and Package Windows Installer
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/rustInk.exe dist/
+          
+          ldd dist/rustInk.exe | grep -i 'ucrt64' | awk '{print $3}' | xargs -I '{}' cp '{}' dist/
+
+      - name: Compile Windows Installer (.exe)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: iscc installer.iss
 
       
-      - name: Build release binary (Unix)
-        if: runner.os != 'Windows'
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Prepare binary
-        shell: bash
+      - name: Build Linux Installer (.deb)
+        if: runner.os == 'Linux'
         run: |
-          cd target/${{ matrix.target }}/release
+          cargo install cargo-deb
+          cargo deb
           
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            mv rustInk.exe ${{ matrix.artifact_name }}
-          else
-            mv rustInk ${{ matrix.artifact_name }}
-          fi
+      
+      - name: Build macOS (.dmg)
+        if: runner.os == 'macOS'
+        run: |
+          cargo install cargo-bundle
+          cargo bundle --release
+          
+          hdiutil create -volname RustInk -srcfolder target/release/bundle/osx/RustInk.app -ov -format UDZO RustInk-macOS-arm64.dmg
 
-      - name: Upload to GitHub Release
+      
+      - name: Upload Installers to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          
+          files: |
+            Output/RustInk-Setup.exe
+            target/debian/*.deb
+            *.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

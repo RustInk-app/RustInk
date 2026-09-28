@@ -26,3 +26,15 @@ uuid = { version = "1", features = ["v4"] }
 lopdf = "0.33.0"
 base64 = "0.22.1"
 rayon = "1.10"
+
+[package.metadata.deb]
+maintainer = "Mattia Perna"
+copyright = "2026, Mattia Perna"
+extended-description = "Note taking application in Rust"
+depends = "$auto, libgtk-3-0, libpoppler-glib8"
+
+[package.metadata.bundle]
+name = "RustInk"
+identifier = "com.mattia939.rustink"
+icon = ["src/ui/icons/rastin_logo.png"]
+version = "1.0.0"
