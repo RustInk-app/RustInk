@@ -1,7 +1,10 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use rustInk::gui::build_ui;
 
 use gtk::prelude::*;
 use gtk::{Application};
+
 
 fn main() {
 

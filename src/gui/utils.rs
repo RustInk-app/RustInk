@@ -60,12 +60,42 @@ pub fn load_css() {
     }
 }
 
+use std::path::PathBuf;
+
+pub fn get_icon_path(filename: &str) -> PathBuf {
+    let mut exe_path = std::env::current_exe().unwrap_or_default();
+    exe_path.pop(); 
+
+    
+    let mut path = exe_path.clone();
+    path.push("icons");
+    path.push(filename);
+
+    
+    if !path.exists() {
+        path = exe_path.clone();
+        path.pop(); 
+        path.push("Resources");
+        path.push("src");
+        path.push("ui");
+        path.push("icons");
+        path.push(filename);
+    }
+
+    
+    if !path.exists() {
+        path = PathBuf::from(format!("src/ui/icons/{}", filename));
+    }
+
+    path
+}
+
 pub fn load_icon(filename: &str) -> gtk::Image {
-    let path = format!("src/ui/icons/{}", filename);
+    let path = get_icon_path(filename);
     if let Ok(pixbuf) = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 24, 24, true) {
         gtk::Image::from_pixbuf(Some(&pixbuf))
     } else {
-        eprintln!("Icon not found: {}", path);
+        eprintln!("Icon not found: {:?}", path);
         gtk::Image::from_icon_name(Some("image-missing"), gtk::IconSize::Menu)
     }
 }

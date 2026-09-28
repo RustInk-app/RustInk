@@ -12,6 +12,7 @@ ArchitecturesInstallIn64BitMode=x64
 
 [Files]
 Source: "dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "src\ui\icons\*"; DestDir: "{app}\icons"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\RustInk"; Filename: "{app}\rustInk.exe"

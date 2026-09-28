@@ -109,15 +109,14 @@ pub fn build_ui(app: &gtk::Application) {
     window.set_title(&state.borrow().window_title());
     window.maximize();
 
-    let icon_path = "src/ui/icons/rustInk_logo.png";
-    if let Ok(icon) = gtk::gdk_pixbuf::Pixbuf::from_file(icon_path) {
-        
+    let icon_path = crate::gui::utils::get_icon_path("rustInk_logo.png");
+    if let Ok(icon) = gtk::gdk_pixbuf::Pixbuf::from_file(&icon_path) {  
         window.set_icon(Some(&icon));
         
         
         gtk::Window::set_default_icon(&icon);
     } else {
-        eprintln!("[UI] Unable to load logo {}", icon_path);
+        eprintln!("[UI] Unable to load logo {}", icon_path.display());
     }
     
     utils::load_css();

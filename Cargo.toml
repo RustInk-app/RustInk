@@ -1,6 +1,7 @@
 [package]
 name = "rustInk"
 version = "0.1.0"
+resources = ["src/ui/icons"]
 edition = "2024"
 
 [dependencies]
@@ -32,9 +33,13 @@ maintainer = "Mattia Perna"
 copyright = "2026, Mattia Perna"
 extended-description = "Note taking application in Rust"
 depends = "$auto, libgtk-3-0, libpoppler-glib8"
+assets = [
+    ["target/release/rustInk", "usr/bin/", "755"],
+    ["src/ui/icons/*", "usr/bin/icons/", "644"]
+]
 
 [package.metadata.bundle]
 name = "RustInk"
 identifier = "com.mattia939.rustink"
-icon = ["src/ui/icons/rastin_logo.png"]
+resources = ["src/ui/icons"]
 version = "1.0.0"
