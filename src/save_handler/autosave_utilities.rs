@@ -8,7 +8,7 @@ use tempfile::{Builder, TempDir};
 
 pub static SESSION_TEMP_DIR: LazyLock<TempDir> = LazyLock::new(|| {
     let dir = Builder::new()
-        .prefix("rastin-")
+        .prefix("rustInk-")
         .rand_bytes(8)
         .tempdir()
         .expect("Error creating temp folder for session");
@@ -49,7 +49,7 @@ pub fn autosave_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    backup_dir().join(format!("backup_{ts}.rastin"))
+    backup_dir().join(format!("backup_{ts}.rustInk"))
 }
 
 pub fn autosave_sentinel_path() -> PathBuf {

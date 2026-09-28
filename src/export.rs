@@ -188,7 +188,7 @@ fn export_via_pdf_injection(
                     let _ = img_stream.compress();
                     let img_id = doc.add_object(img_stream);
 
-                    let xobj_name = format!("RastinOverlay{}", idx);
+                    let xobj_name = format!("rustInkOverlay{}", idx);
                     add_xobject_to_page(&mut doc, page_obj_id, &xobj_name, img_id)?;
 
                     

@@ -75,7 +75,7 @@ pub fn build_ui(app: &gtk::Application) {
                     st.redo_stack.clear();
 
                     if let Some(bp) = &original_bundle {
-                        if bp.extension().and_then(|e| e.to_str()) == Some("rastin") {
+                        if bp.extension().and_then(|e| e.to_str()) == Some("rustInk") {
                             let _ = st.acquire_lock(bp);
                         }
                     }
@@ -103,13 +103,13 @@ pub fn build_ui(app: &gtk::Application) {
     let builder = gtk::Builder::from_string(glade_src);
 
     let window: gtk::Window = builder
-        .object("rastin_window")
-        .expect("rastin_window non trovata");
+        .object("rustInk_window")
+        .expect("rustInk_window non trovata");
     app.add_window(&window);
     window.set_title(&state.borrow().window_title());
     window.maximize();
 
-    let icon_path = "src/ui/icons/rastin_logo.png";
+    let icon_path = "src/ui/icons/rustInk_logo.png";
     if let Ok(icon) = gtk::gdk_pixbuf::Pixbuf::from_file(icon_path) {
         
         window.set_icon(Some(&icon));

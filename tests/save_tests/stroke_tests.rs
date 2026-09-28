@@ -1,8 +1,8 @@
-use RASTIN::models::color::Color; 
-use RASTIN::models::stroke::Stroke; 
-use RASTIN::models::page::ComponentPayload; 
-use RASTIN::save_handler::database_utilities::append_active_component; 
-use RASTIN::save_handler::db::{init_schema, load_page, export_medias, import_medias}; 
+use rustInk::models::color::Color; 
+use rustInk::models::stroke::Stroke; 
+use rustInk::models::page::ComponentPayload; 
+use rustInk::save_handler::database_utilities::append_active_component; 
+use rustInk::save_handler::db::{init_schema, load_page, export_medias, import_medias}; 
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -18,7 +18,7 @@ fn test_penstroke_basic_functionality() {
     let dir = tempdir().expect("Impossibile creare la cartella temporanea");
     
     let db_tmp_path = dir.path().join("struttura_base.sqlite");
-    let rastin_path = dir.path().join("documento_base.rastin");
+    let rustInk_path = dir.path().join("documento_base.rustInk");
     let db_recovery_path = dir.path().join("recovery_base.sqlite");
 
     let stroke1 = Stroke {
@@ -48,10 +48,10 @@ fn test_penstroke_basic_functionality() {
         let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
     }
 
-    export_medias(&db_tmp_path, &rastin_path).expect("Esportazione fallita"); 
+    export_medias(&db_tmp_path, &rustInk_path).expect("Esportazione fallita"); 
 
     {
-        import_medias(&rastin_path, &db_recovery_path).expect("Importazione fallita"); 
+        import_medias(&rustInk_path, &db_recovery_path).expect("Importazione fallita"); 
         
         let conn = Connection::open(&db_recovery_path).expect("Apertura DB recuperato");
         let page_data = load_page(&conn, 1).expect("Caricamento pagina"); 
@@ -91,7 +91,7 @@ fn test_salvataggio_e_recupero_penstroke_multiplo() {
 
     for i in 0..docs_da_creare {
         let db_tmp_path = output_dir.join(format!("tmp_struttura_{i}.sqlite"));
-        let rastin_path = output_dir.join(format!("documento_{i}.rastin"));
+        let rustInk_path = output_dir.join(format!("documento_{i}.rustInk"));
 
         let width = 1.5 + (i as f64 * 0.5); 
         let r = (i as f64 * 10.0 % 255.0) / 255.0;
@@ -115,11 +115,11 @@ fn test_salvataggio_e_recupero_penstroke_multiplo() {
             let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
         } 
         
-        export_medias(&db_tmp_path, &rastin_path).expect("Export fallito"); 
+        export_medias(&db_tmp_path, &rustInk_path).expect("Export fallito"); 
 
         {
             let db_recovery_path = output_dir.join(format!("recovery_{i}.sqlite"));
-            import_medias(&rastin_path, &db_recovery_path).expect("Import fallita"); 
+            import_medias(&rustInk_path, &db_recovery_path).expect("Import fallita"); 
             
             let conn = Connection::open(&db_recovery_path).expect("Riapertura DB");
             let page_data = load_page(&conn, 1).expect("Caricamento pagina"); 

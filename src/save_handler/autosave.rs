@@ -25,7 +25,7 @@ pub fn clear_old_sessions() {
             if p.is_dir() {
                 let dir_name = p.file_name().unwrap_or_default().to_string_lossy();
 
-                if dir_name.starts_with("rastin-") && p != current_session_path {
+                if dir_name.starts_with("rustInk-") && p != current_session_path {
                     let lock_path = p.join("session.lock");
                     if let Ok(file) = File::open(&lock_path) {
                         if file.try_lock_exclusive().is_err() {
@@ -52,7 +52,7 @@ pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {
             let p = entry.path();
             let dir_name = p.file_name().unwrap_or_default().to_string_lossy();
 
-            if p.is_dir() && dir_name.starts_with("rastin-") && p != current_session_path {
+            if p.is_dir() && dir_name.starts_with("rustInk-") && p != current_session_path {
                 let lock_path = p.join("session.lock");
                 if let Ok(file) = File::open(&lock_path) {
                     if file.try_lock_exclusive().is_err() {
@@ -65,7 +65,7 @@ pub fn check_recovery() -> Option<(PathBuf, Option<PathBuf>)> {
                 if let Ok(backup_entries) = std::fs::read_dir(&old_backup_dir) {
                     for b_entry in backup_entries.flatten() {
                         let bp = b_entry.path();
-                        if bp.extension().and_then(|e| e.to_str()) == Some("rastin") {
+                        if bp.extension().and_then(|e| e.to_str()) == Some("rustInk") {
                             all_backups.push((bp, old_backup_dir.clone()));
                         }
                     }

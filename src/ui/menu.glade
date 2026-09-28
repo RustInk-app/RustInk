@@ -225,7 +225,7 @@
     <property name="step-increment">0.10</property>
     <property name="page-increment">10</property>
   </object>
-  <object class="GtkWindow" id="rastin_window">
+  <object class="GtkWindow" id="rustInk_window">
     <property name="can-focus">False</property>
     <child>
       <object class="GtkBox">

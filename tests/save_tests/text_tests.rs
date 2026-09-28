@@ -1,8 +1,8 @@
-use RASTIN::models::page::ComponentPayload;
-use RASTIN::models::textbox::{RichTextBlock, TextSpan, TextStyle};
-use RASTIN::models::color::Color;
-use RASTIN::save_handler::db::{init_schema, load_page, encode_payload_list};
-use RASTIN::save_handler::database_utilities::append_active_component;
+use rustInk::models::page::ComponentPayload;
+use rustInk::models::textbox::{RichTextBlock, TextSpan, TextStyle};
+use rustInk::models::color::Color;
+use rustInk::save_handler::db::{init_schema, load_page, encode_payload_list};
+use rustInk::save_handler::database_utilities::append_active_component;
 use rusqlite::Connection;
 
 
@@ -164,7 +164,7 @@ fn test_multiple_texts_with_zoom_fluctuations_on_same_page() {
         id_temporaneo: "txt_short".to_string(),
         x: 50.0, y: 50.0, width: 200.0,
         spans: vec![TextSpan { 
-            text: "Ciao RASTIN!".to_string(), 
+            text: "Ciao rustInk!".to_string(), 
             style: TextStyle::default() 
         }],
     }; 

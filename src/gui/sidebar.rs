@@ -14,7 +14,7 @@ use crate::save_handler::autosave_utilities::*;
 
 lazy_static::lazy_static! {
     pub(crate) static ref DND_TARGETS: [gtk::TargetEntry; 1] = [
-        gtk::TargetEntry::new("application/x-rastin-page", gtk::TargetFlags::SAME_APP, 0),
+        gtk::TargetEntry::new("application/x-rustInk-page", gtk::TargetFlags::SAME_APP, 0),
     ];
 }
 

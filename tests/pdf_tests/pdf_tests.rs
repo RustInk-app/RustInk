@@ -2,10 +2,10 @@ use std::sync::mpsc;
 use tempfile::tempdir;
 use lopdf::Document;
 
-use RASTIN::export::export_document_to_pdf;
-use RASTIN::save_handler::db::{init_schema, encode_payload_list};
-use RASTIN::save_handler::database_utilities::insert_page_after;
-use RASTIN::models::page::PaperBackground;
+use rustInk::export::export_document_to_pdf;
+use rustInk::save_handler::db::{init_schema, encode_payload_list};
+use rustInk::save_handler::database_utilities::insert_page_after;
+use rustInk::models::page::PaperBackground;
 
 #[test]
 fn test_export_pdf_contains_correct_pages() {

@@ -1,5 +1,5 @@
 [package]
-name = "rastin-fuzz"
+name = "rustInk-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1.3", features = ["derive"] }
-RASTIN = { path = ".." }
+rustInk = { path = ".." }
 
 # Isola la cartella fuzz per evitare conflitti di workspace con il progetto principale
 [workspace]

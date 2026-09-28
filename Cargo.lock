@@ -3,34 +3,6 @@
 version = 4
 
 [[package]]
-name = "RASTIN"
-version = "0.1.0"
-dependencies = [
- "base64",
- "bincode",
- "cairo-rs",
- "flate2",
- "fs2",
- "gdk",
- "gio",
- "glib",
- "gtk",
- "image",
- "lazy_static",
- "lopdf",
- "pango",
- "pangocairo",
- "poppler-rs",
- "quick-xml",
- "rayon",
- "rusqlite",
- "serde",
- "tempfile",
- "uuid",
- "zip",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1648,6 +1620,34 @@ dependencies = [
  "hashlink",
  "libsqlite3-sys",
  "smallvec",
+]
+
+[[package]]
+name = "rustInk"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "bincode",
+ "cairo-rs",
+ "flate2",
+ "fs2",
+ "gdk",
+ "gio",
+ "glib",
+ "gtk",
+ "image",
+ "lazy_static",
+ "lopdf",
+ "pango",
+ "pangocairo",
+ "poppler-rs",
+ "quick-xml",
+ "rayon",
+ "rusqlite",
+ "serde",
+ "tempfile",
+ "uuid",
+ "zip",
 ]
 
 [[package]]

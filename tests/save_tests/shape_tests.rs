@@ -1,7 +1,7 @@
-use RASTIN::models::page::{ComponentPayload, ShapeBlock, ShapeKind};
-use RASTIN::models::color::Color;
-use RASTIN::save_handler::db::{init_schema, load_page, encode_payload_list};
-use RASTIN::save_handler::database_utilities::append_active_component;
+use rustInk::models::page::{ComponentPayload, ShapeBlock, ShapeKind};
+use rustInk::models::color::Color;
+use rustInk::save_handler::db::{init_schema, load_page, encode_payload_list};
+use rustInk::save_handler::database_utilities::append_active_component;
 use rusqlite::Connection;
 
 

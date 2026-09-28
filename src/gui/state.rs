@@ -383,7 +383,7 @@ impl AppState {
 
     pub fn acquire_lock(&mut self, bundle: &PathBuf) -> bool {
         self.release_lock();
-        let lock = bundle.with_extension("rastin.lock");
+        let lock = bundle.with_extension("rustInk.lock");
         if lock.exists() {
             return false;
         }

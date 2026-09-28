@@ -1,7 +1,7 @@
 use rusqlite::Connection;
-use RASTIN::save_handler::db::*;
-use RASTIN::save_handler::database_utilities::*;
-use RASTIN::models::page::PaperBackground;
+use rustInk::save_handler::db::*;
+use rustInk::save_handler::database_utilities::*;
+use rustInk::models::page::PaperBackground;
 
 #[test]
 fn test_pages_backgrounds_and_movement() {

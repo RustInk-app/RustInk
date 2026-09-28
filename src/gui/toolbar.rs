@@ -58,7 +58,7 @@ pub(crate) fn setup_toolbar(
         btn
     };
 
-    let btn_save = make_btn("document-save.svg", "Save document (.rastin)");
+    let btn_save = make_btn("document-save.svg", "Save document (.rustInk)");
     let btn_open = make_btn("document-open.svg", "Open document");
     add_item!(&btn_save);
     add_item!(&btn_open);

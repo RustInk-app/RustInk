@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "RASTIN"
+name = "rustInk"
 version = "0.1.0"
 dependencies = [
  "base64",
@@ -1601,10 +1601,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rastin-fuzz"
+name = "rustInk-fuzz"
 version = "0.0.0"
 dependencies = [
- "RASTIN",
+ "rustInk",
  "arbitrary",
  "libfuzzer-sys",
 ]

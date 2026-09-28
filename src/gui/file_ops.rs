@@ -404,8 +404,8 @@ pub(crate) fn setup_file_ops(
                 dialog.add_button("Save", gtk::ResponseType::Accept);
                 dialog.set_do_overwrite_confirmation(true);
                 if let Some(p) = state.borrow().bundle_path.clone() { dialog.set_filename(p); }
-                else { dialog.set_current_name("document.rastin"); }
-                let f = gtk::FileFilter::new(); f.set_name(Some("RASTIN (*.rastin)")); f.add_pattern("*.rastin"); dialog.add_filter(f);
+                else { dialog.set_current_name("document.rustInk"); }
+                let f = gtk::FileFilter::new(); f.set_name(Some("rustInk (*.rustInk)")); f.add_pattern("*.rustInk"); dialog.add_filter(f);
 
                 let res = dialog.run();
                 let path_opt = dialog.filename();
@@ -436,8 +436,8 @@ pub(crate) fn setup_file_ops(
         dialog.add_button("Save", gtk::ResponseType::Accept);
         dialog.set_do_overwrite_confirmation(true);
         if let Some(p) = state.borrow().bundle_path.clone() { dialog.set_filename(p); }
-        else { dialog.set_current_name("document.rastin"); }
-        let f = gtk::FileFilter::new(); f.set_name(Some("RASTIN (*.rastin)")); f.add_pattern("*.rastin"); dialog.add_filter(f);
+        else { dialog.set_current_name("document.rustInk"); }
+        let f = gtk::FileFilter::new(); f.set_name(Some("rustInk (*.rustInk)")); f.add_pattern("*.rustInk"); dialog.add_filter(f);
 
         let res = dialog.run();
         let path_opt = dialog.filename();
@@ -513,8 +513,8 @@ pub(crate) fn setup_file_ops(
         );
 
         let f1 = gtk::FileFilter::new(); 
-        f1.set_name(Some("RASTIN (*.rastin)")); 
-        f1.add_pattern("*.rastin"); 
+        f1.set_name(Some("rustInk (*.rustInk)")); 
+        f1.add_pattern("*.rustInk"); 
         open_dialog.add_filter(f1);
 
         let f2 = gtk::FileFilter::new(); 
@@ -524,7 +524,7 @@ pub(crate) fn setup_file_ops(
 
         let f3 = gtk::FileFilter::new(); 
         f3.set_name(Some("All supported")); 
-        f3.add_pattern("*.rastin"); 
+        f3.add_pattern("*.rustInk"); 
         f3.add_pattern("*.xopp"); 
         open_dialog.add_filter(f3);
 
@@ -538,8 +538,8 @@ pub(crate) fn setup_file_ops(
         let ext = chosen.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
 
 
-        if ext == "rastin" {
-            let lock_file = chosen.with_extension("rastin.lock");
+        if ext == "rustInk" {
+            let lock_file = chosen.with_extension("rustInk.lock");
             if lock_file.exists() {
                 let dlg = gtk::MessageDialog::new(
                     Some(&window), gtk::DialogFlags::MODAL, gtk::MessageType::Error, gtk::ButtonsType::Ok,
@@ -688,7 +688,7 @@ pub(crate) fn setup_file_ops(
                     
 
                     if let Some(ref bp) = st.bundle_path.clone() {
-                        if bp.extension().and_then(|e| e.to_str()) == Some("rastin") {
+                        if bp.extension().and_then(|e| e.to_str()) == Some("rustInk") {
                             let _ = st.acquire_lock(bp);
                         }
                     }
@@ -765,7 +765,7 @@ pub(crate) fn setup_autosave(state: &Rc<RefCell<AppState>>) {
                 .flatten()
                 .flatten()
                 .map(|e| e.path())
-                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rastin"))
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rustInk"))
                 .collect();
             backups.sort();
             while backups.len() > 5 {
@@ -812,14 +812,14 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
                     save_dialog.add_button("Save", gtk::ResponseType::Accept);
                     save_dialog.set_do_overwrite_confirmation(true);
                     let filter = gtk::FileFilter::new();
-                    filter.set_name(Some("RASTIN (*.rastin)"));
-                    filter.add_pattern("*.rastin");
+                    filter.set_name(Some("rustInk (*.rustInk)"));
+                    filter.add_pattern("*.rustInk");
                     save_dialog.add_filter(filter);
 
                     if let Some(p) = s.borrow().bundle_path.clone() {
                         save_dialog.set_filename(p);
                     } else {
-                        save_dialog.set_current_name("document.rastin");
+                        save_dialog.set_current_name("document.rustInk");
                     }
 
                     let save_resp = save_dialog.run();

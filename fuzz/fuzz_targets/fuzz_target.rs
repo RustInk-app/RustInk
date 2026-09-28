@@ -1,10 +1,10 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use arbitrary::Arbitrary;
-use RASTIN::models::stroke::Stroke;
-use RASTIN::models::color::Color;
-use RASTIN::models::page::ComponentPayload;
-use RASTIN::save_handler::db::*;
+use rustInk::models::stroke::Stroke;
+use rustInk::models::color::Color;
+use rustInk::models::page::ComponentPayload;
+use rustInk::save_handler::db::*;
 
 
 

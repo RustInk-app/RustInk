@@ -1,4 +1,4 @@
-use RASTIN::gui::build_ui;
+use rustInk::gui::build_ui;
 
 use gtk::prelude::*;
 use gtk::{Application};
@@ -6,7 +6,7 @@ use gtk::{Application};
 fn main() {
 
     let app = Application::builder()
-        .application_id("com.github.rastin.app")
+        .application_id("com.github.rustInk.app")
         
         .flags(gio::ApplicationFlags::NON_UNIQUE)
         .build();

@@ -10,7 +10,7 @@ pub fn show_loading_dialog(parent: &gtk::Window, message: &str) -> gtk::Dialog {
     dialog.set_modal(true);
     dialog.set_deletable(false);
     dialog.set_resizable(false);
-    dialog.set_title("RASTIN");
+    dialog.set_title("rustInk");
 
     let content = dialog.content_area();
     content.set_spacing(12);

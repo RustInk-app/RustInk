@@ -1,9 +1,9 @@
-use RASTIN::models::page::{PageData, ComponentPayload, ShapeBlock, ShapeKind};
-use RASTIN::models::stroke::Stroke;
-use RASTIN::models::image::ImageBlock;
-use RASTIN::models::textbox::{RichTextBlock, TextSpan, TextStyle};
-use RASTIN::models::color::Color;
-use RASTIN::models::select::hit_test_component;
+use rustInk::models::page::{PageData, ComponentPayload, ShapeBlock, ShapeKind};
+use rustInk::models::stroke::Stroke;
+use rustInk::models::image::ImageBlock;
+use rustInk::models::textbox::{RichTextBlock, TextSpan, TextStyle};
+use rustInk::models::color::Color;
+use rustInk::models::select::hit_test_component;
 
 
 fn setup_test_page() -> PageData {
