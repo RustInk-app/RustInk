@@ -17,28 +17,88 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-gnu
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
+            arch_name: windows-setup-AMD64
+            msystem: UCRT64
+            msys_pkg: mingw-w64-ucrt-x86_64
+            ext: exe
+          - os: windows-latest
+            target: aarch64-pc-windows-gnullvm
+            arch_name: windows-setup-ARM64
+            msystem: CLANGARM64
+            msys_pkg: mingw-w64-clang-aarch64
+            ext: exe
+          - os: macos-13
+            target: x86_64-apple-darwin
+            arch_name: macOS-X64
+            ext: dmg
           - os: macos-latest
             target: aarch64-apple-darwin
+            arch_name: macOS-ARM64
+            ext: dmg
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            arch_name: Ubuntu-jammy-x86_64
+            ext: deb
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            arch_name: Ubuntu-jammy-aarch64
+            ext: deb
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            arch_name: Ubuntu-noble-x86_64
+            ext: deb
+          - os: ubuntu-24.04
+            target: aarch64-unknown-linux-gnu
+            arch_name: Ubuntu-noble-aarch64
+            ext: deb
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch_name: Ubuntu-resolute-x86_64
+            ext: deb
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            arch_name: Ubuntu-resolute-aarch64
+            ext: deb
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch_name: Debian-trixie-x86_64
+            ext: deb
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch_name: x86_64
+            ext: AppImage
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            arch_name: aarch64
+            ext: AppImage
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup MSYS2 (Windows)
+      - name: Extract version
+        id: get_version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          else
+            echo "VERSION=latest" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Setup MSYS2
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
-          msystem: UCRT64
+          msystem: ${{ matrix.msystem }}
           update: true
           path-type: inherit
           install: >-
-            mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-gtk3
-            mingw-w64-ucrt-x86_64-poppler
-            mingw-w64-ucrt-x86_64-librsvg
+            ${{ matrix.msys_pkg }}-toolchain
+            ${{ matrix.msys_pkg }}-pkgconf
+            ${{ matrix.msys_pkg }}-gtk3
+            ${{ matrix.msys_pkg }}-poppler
+            ${{ matrix.msys_pkg }}-librsvg
 
       - name: Install Linux Dependencies
         if: runner.os == 'Linux'
@@ -47,6 +107,9 @@ jobs:
           sudo apt-get install -y pkg-config libx11-dev libasound2-dev libudev-dev \
             libxcb-shape0-dev libxcb-xfixes0-dev libgtk-3-dev libwayland-dev \
             libxkbcommon-dev libfontconfig1-dev libpoppler-glib-dev
+          if [[ "${{ matrix.target }}" == *"aarch64"* ]]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          fi
 
       - name: Install macOS Dependencies
         if: runner.os == 'macOS'
@@ -57,56 +120,76 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build and Package Windows Installer
+      - name: Build and Package Windows
         if: runner.os == 'Windows'
         shell: msys2 {0}
         env:
           PKG_CONFIG_ALLOW_CROSS: 1
         run: |
           cargo build --release --target ${{ matrix.target }}
-
           rm -rf dist
           mkdir -p dist/lib
           mkdir -p dist/share/glib-2.0
           mkdir -p dist/share/icons
           mkdir -p dist/icons
-
           cp target/${{ matrix.target }}/release/rustInk.exe dist/
           cp -r src/ui/icons/* dist/icons/
+          ldd dist/rustInk.exe | grep -i '${{ matrix.msystem }}' | awk '{print $3}' | xargs -r -I '{}' cp -u '{}' dist/
+          MSYS_DIR=$(echo /${{ matrix.msystem }} | tr '[:upper:]' '[:lower:]')
+          cp -r $MSYS_DIR/lib/gdk-pixbuf-2.0 dist/lib/ || true
+          find $MSYS_DIR/lib/gdk-pixbuf-2.0 -name "*.dll" -exec ldd {} + 2>/dev/null | grep -i '${{ matrix.msystem }}' | awk '{print $3}' | sort -u | xargs -r -I '{}' cp -u '{}' dist/ || true
+          cp -r $MSYS_DIR/share/glib-2.0/schemas dist/share/glib-2.0/ || true
+          cp -r $MSYS_DIR/share/icons/hicolor dist/share/icons/ || true
+          cp -r $MSYS_DIR/share/icons/Adwaita dist/share/icons/ || true
 
-          ldd dist/rustInk.exe | grep -i 'ucrt64' | awk '{print $3}' | xargs -r -I '{}' cp -u '{}' dist/
-
-          cp -r /ucrt64/lib/gdk-pixbuf-2.0 dist/lib/
-          find /ucrt64/lib/gdk-pixbuf-2.0 -name "*.dll" -exec ldd {} + 2>/dev/null | grep -i 'ucrt64' | awk '{print $3}' | sort -u | xargs -r -I '{}' cp -u '{}' dist/
-
-          cp -r /ucrt64/share/glib-2.0/schemas dist/share/glib-2.0/
-          cp -r /ucrt64/share/icons/hicolor dist/share/icons/
-          cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
-
-      - name: Compile Windows Installer (.exe)
+      - name: Compile Windows Installer
         if: runner.os == 'Windows'
         shell: cmd
-        run: iscc installer.iss
+        run: |
+          iscc installer.iss
+          move Output\RustInk-Setup.exe rustink-%VERSION%-${{ matrix.arch_name }}.exe
 
-      - name: Build Linux Installer (.deb)
-        if: runner.os == 'Linux'
+      - name: Build Linux Deb Installer
+        if: runner.os == 'Linux' && matrix.ext == 'deb'
         run: |
           cargo install cargo-deb
-          cargo deb
+          cargo deb --target ${{ matrix.target }}
+          mv target/${{ matrix.target }}/debian/*.deb rustink-${{ env.VERSION }}-${{ matrix.arch_name }}.deb
           
-      - name: Build macOS (.dmg)
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux' && matrix.ext == 'AppImage'
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.arch_name }}.AppImage
+          wget https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/master/linuxdeploy-plugin-gtk.sh
+          chmod +x linuxdeploy-${{ matrix.arch_name }}.AppImage linuxdeploy-plugin-gtk.sh
+          mkdir -p AppDir/usr/bin
+          cp target/${{ matrix.target }}/release/rustInk AppDir/usr/bin/
+          export OUTPUT=rustink-${{ env.VERSION }}-${{ matrix.arch_name }}.AppImage
+          ./linuxdeploy-${{ matrix.arch_name }}.AppImage --appdir AppDir --plugin gtk --output appimage
+
+      - name: Build macOS Installer
         if: runner.os == 'macOS'
         run: |
           cargo install cargo-bundle
-          cargo bundle --release
-          hdiutil create -volname RustInk -srcfolder target/release/bundle/osx/RustInk.app -ov -format UDZO RustInk-macOS-arm64.dmg
+          cargo bundle --release --target ${{ matrix.target }}
+          brew install dylibbundler
+          APP_DIR="target/${{ matrix.target }}/release/bundle/osx/RustInk.app"
+          dylibbundler -od -b -x "$APP_DIR/Contents/MacOS/rustInk" -d "$APP_DIR/Contents/Frameworks" -p "@executable_path/../Frameworks/"
+          mkdir -p "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
+          mkdir -p "$APP_DIR/Contents/Resources/share/icons"
+          cp -r /opt/homebrew/share/glib-2.0/schemas/* "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/" || true
+          cp -r src/ui/icons/* "$APP_DIR/Contents/Resources/share/icons/" || true
+          glib-compile-schemas "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/" || true
+          hdiutil create -volname RustInk -srcfolder "$APP_DIR" -ov -format UDZO rustink-${{ env.VERSION }}-${{ matrix.arch_name }}.dmg
 
       - name: Upload Installers to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Output/RustInk-Setup.exe
-            target/debian/*.deb
-            *.dmg
+            rustink-*.exe
+            rustink-*.deb
+            rustink-*.dmg
+            rustink-*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
