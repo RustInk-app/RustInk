@@ -1,16 +1,12 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use rustInk::gui::build_ui;
-
 use gtk::prelude::*;
 use gtk::{Application};
 
-
 fn main() {
-
     let app = Application::builder()
         .application_id("com.github.rustInk.app")
-        
         .flags(gio::ApplicationFlags::NON_UNIQUE)
         .build();
 

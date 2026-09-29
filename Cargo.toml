@@ -1,6 +1,6 @@
 [package]
 name = "rustInk"
-version = "0.1.0"
+version = "1.0.0"
 resources = ["src/ui/icons"]
 edition = "2024"
 
@@ -27,6 +27,9 @@ uuid = { version = "1", features = ["v4"] }
 lopdf = "0.33.0"
 base64 = "0.22.1"
 rayon = "1.10"
+
+[build-dependencies]
+winres = "0.1"
 
 [package.metadata.deb]
 maintainer = "Mattia Perna"

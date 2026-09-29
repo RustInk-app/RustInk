@@ -26,7 +26,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      
       - name: Setup MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -39,6 +38,7 @@ jobs:
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-gtk3
             mingw-w64-ucrt-x86_64-poppler
+            mingw-w64-ucrt-x86_64-librsvg
 
       - name: Install Linux Dependencies
         if: runner.os == 'Linux'
@@ -57,7 +57,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      
       - name: Build and Package Windows Installer
         if: runner.os == 'Windows'
         shell: msys2 {0}
@@ -65,37 +64,53 @@ jobs:
           PKG_CONFIG_ALLOW_CROSS: 1
         run: |
           cargo build --release --target ${{ matrix.target }}
-          mkdir -p dist
+          
+          # Preparazione delle cartelle di appoggio
+          mkdir -p dist/lib
+          mkdir -p dist/share/glib-2.0
+          mkdir -p dist/share/icons
+          
+          # Copia dell'eseguibile compilato
           cp target/${{ matrix.target }}/release/rustInk.exe dist/
           
-          ldd dist/rustInk.exe | grep -i 'ucrt64' | awk '{print $3}' | xargs -I '{}' cp '{}' dist/
+          # Nota: installer.iss preleva già da src/ui/icons, ma copiamo in dist per coerenza col test locale
+          cp -r src/ui/icons dist/
+          
+          # Copia delle DLL dirette
+          ldd dist/rustInk.exe | grep -i 'ucrt64' | awk '{print $3}' | xargs -I '{}' cp -n '{}' dist/
+          
+          # Copia dei moduli GDK (SVG) e delle librerie dinamiche dipendenti (librsvg, ecc.)
+          cp -r /ucrt64/lib/gdk-pixbuf-2.0 dist/lib/
+          find /ucrt64/lib/gdk-pixbuf-2.0 -name "libpixbufloader-svg.dll" -exec ldd {} \; | grep -i 'ucrt64' | awk '{print $3}' | xargs -I '{}' cp -n '{}' dist/
+          
+          # Copia degli Schemas di sistema GTK
+          cp -r /ucrt64/share/glib-2.0/schemas dist/share/glib-2.0/
+          
+          # Copia delle icone di fallback necessarie a GTK
+          cp -r /ucrt64/share/icons/hicolor dist/share/icons/
+          cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
 
       - name: Compile Windows Installer (.exe)
         if: runner.os == 'Windows'
         shell: cmd
         run: iscc installer.iss
 
-      
       - name: Build Linux Installer (.deb)
         if: runner.os == 'Linux'
         run: |
           cargo install cargo-deb
           cargo deb
           
-      
       - name: Build macOS (.dmg)
         if: runner.os == 'macOS'
         run: |
           cargo install cargo-bundle
           cargo bundle --release
-          
           hdiutil create -volname RustInk -srcfolder target/release/bundle/osx/RustInk.app -ov -format UDZO RustInk-macOS-arm64.dmg
 
-      
       - name: Upload Installers to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          
           files: |
             Output/RustInk-Setup.exe
             target/debian/*.deb
