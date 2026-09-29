@@ -64,29 +64,22 @@ jobs:
           PKG_CONFIG_ALLOW_CROSS: 1
         run: |
           cargo build --release --target ${{ matrix.target }}
-          
-          # Preparazione delle cartelle di appoggio
+
+          rm -rf dist
           mkdir -p dist/lib
           mkdir -p dist/share/glib-2.0
           mkdir -p dist/share/icons
-          
-          # Copia dell'eseguibile compilato
+          mkdir -p dist/icons
+
           cp target/${{ matrix.target }}/release/rustInk.exe dist/
-          
-          # Nota: installer.iss preleva già da src/ui/icons, ma copiamo in dist per coerenza col test locale
-          cp -r src/ui/icons dist/
-          
-          # Copia delle DLL dirette
-          ldd dist/rustInk.exe | grep -i 'ucrt64' | awk '{print $3}' | xargs -I '{}' cp -n '{}' dist/
-          
-          # Copia dei moduli GDK (SVG) e delle librerie dinamiche dipendenti (librsvg, ecc.)
+          cp -r src/ui/icons/* dist/icons/
+
+          ldd dist/rustInk.exe | grep -i 'ucrt64' | awk '{print $3}' | xargs -r -I '{}' cp -u '{}' dist/
+
           cp -r /ucrt64/lib/gdk-pixbuf-2.0 dist/lib/
-          find /ucrt64/lib/gdk-pixbuf-2.0 -name "libpixbufloader-svg.dll" -exec ldd {} \; | grep -i 'ucrt64' | awk '{print $3}' | xargs -I '{}' cp -n '{}' dist/
-          
-          # Copia degli Schemas di sistema GTK
+          find /ucrt64/lib/gdk-pixbuf-2.0 -name "*.dll" -exec ldd {} + 2>/dev/null | grep -i 'ucrt64' | awk '{print $3}' | sort -u | xargs -r -I '{}' cp -u '{}' dist/
+
           cp -r /ucrt64/share/glib-2.0/schemas dist/share/glib-2.0/
-          
-          # Copia delle icone di fallback necessarie a GTK
           cp -r /ucrt64/share/icons/hicolor dist/share/icons/
           cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
 
