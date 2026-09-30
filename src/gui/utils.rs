@@ -143,6 +143,44 @@ pub fn setup_chrome(builder: &gtk::Builder, _canvas: &gtk::DrawingArea) {
     btn_zoom_out.connect_clicked(clone!(@weak zoom_adj => move |_| {
         zoom_adj.set_value((zoom_adj.value() - 0.25).max(zoom_adj.lower()));
     }));
+
+        
+    let handle: gtk::Button     = builder.object("btn_close_sidebar").expect("btn_close_sidebar not found");
+    let handle_icon: gtk::Image = builder.object("sidebar_handle_icon").expect("sidebar_handle_icon not found");
+    let paned: gtk::Paned       = builder.object("first_panel").expect("first_panel not found");
+    let sidebar: gtk::Box       = builder.object("sidebar_container").expect("sidebar_container not found");
+    let sidebar_opt: gtk::CheckMenuItem = builder.object("view_sidebar_option").expect("view_sidebar_option not found");
+
+    
+    let sync = std::rc::Rc::new({
+        let (handle, icon, paned, sidebar) = (handle.clone(), handle_icon.clone(), paned.clone(), sidebar.clone());
+        move || {
+            if sidebar.is_visible() {
+                handle.set_margin_start((paned.position() - 13).max(0));
+                icon.set_from_icon_name(Some("pan-start-symbolic"), gtk::IconSize::Menu);
+                handle.set_tooltip_text(Some("Hide page panel"));
+            } else {
+                handle.set_margin_start(0);
+                icon.set_from_icon_name(Some("pan-end-symbolic"), gtk::IconSize::Menu);
+                handle.set_tooltip_text(Some("Show page panel"));
+            }
+        }
+    });
+    { let s = sync.clone(); paned.connect_position_notify(move |_| s()); }
+    { let s = sync.clone(); sidebar.connect_visible_notify(move |_| s()); }
+
+    
+    sidebar_opt.connect_toggled(clone!(@weak sidebar => move |item| sidebar.set_visible(item.is_active())));
+    handle.connect_clicked(clone!(@weak sidebar_opt => move |_| sidebar_opt.set_active(!sidebar_opt.is_active())));
+
+    
+    if let (Some(side_add), Some(menu_add)) = (
+        builder.object::<gtk::Button>("btn_sidebar_add_page"),
+        builder.object::<gtk::Button>("btn_add_page"),
+    ) {
+        side_add.connect_clicked(move |_| menu_add.emit_clicked());
+    }
+
 }
 
 use std::path::PathBuf;

@@ -439,7 +439,7 @@
         <property name="spacing">2</property>
         <property name="margin">8</property>
         <child>
-          <object class="GtkButton" id="btn_add_page">
+          <object class="GtkButton" id="btn_sidebar_add_page">
             <property name="label" translatable="yes">Add page</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
@@ -782,58 +782,39 @@
                         <property name="can-focus">False</property>
                         <property name="orientation">vertical</property>
                         <child>
-                          <object class="GtkBox" id="sidebar_close_box">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <child>
-                              <object class="GtkLabel">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="label" translatable="yes">Pages</property>
-                              </object>
-                              <packing>
-                                <property name="expand">True</property>
-                                <property name="fill">True</property>
-                                <property name="position">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkButton" id="btn_close_sidebar">
-                                <property name="label" translatable="yes">×</property>
-                                <property name="visible">True</property>
-                                <property name="can-focus">True</property>
-                                <property name="receives-default">True</property>
-                                <style>
-                                  <class name="ib" />
-                                </style>
-                              </object>
-                              <packing>
-                                <property name="expand">True</property>
-                                <property name="fill">True</property>
-                                <property name="position">1</property>
-                              </packing>
-                            </child>
-                            <style>
-                              <class name="sidebar-head" />
-                            </style>
-                          </object>
-                          <packing>
-                            <property name="expand">False</property>
-                            <property name="fill">True</property>
-                            <property name="position">0</property>
-                          </packing>
-                        </child>
-                        <child>
                           <object class="GtkScrolledWindow" id="first_panel_sidebar">
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
-                            <property name="shadow-type">in</property>
+                            <property name="shadow-type">none</property>
                             <child>
                               <placeholder />
                             </child>
                           </object>
                           <packing>
                             <property name="expand">True</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="btn_add_page">
+                            <property name="visible">True</property>
+                            <property name="can-focus">True</property>
+                            <property name="receives-default">True</property>
+                            <property name="tooltip-text" translatable="yes">Add page</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="icon-name">list-add-symbolic</property>
+                              </object>
+                            </child>
+                            <style>
+                              <class name="add-page" />
+                            </style>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
                             <property name="fill">True</property>
                             <property name="position">1</property>
                           </packing>
@@ -871,6 +852,29 @@
                       </packing>
                     </child>
                   </object>
+                </child>
+                <child type="overlay">
+                      <object class="GtkButton" id="btn_close_sidebar">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="receives-default">True</property>
+                        <property name="halign">start</property>
+                        <property name="valign">start</property>
+                        <property name="margin-start">137</property>
+                        <property name="margin-top">20</property>
+                        <property name="tooltip-text" translatable="yes">Hide page panel</property>
+                        <child>
+                          <object class="GtkImage" id="sidebar_handle_icon">
+                            <property name="icon-size">1</property>
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="icon-name">pan-start-symbolic</property>
+                          </object>
+                        </child>
+                        <style>
+                          <class name="sidebar-handle" />
+                        </style>
+                      </object>
                 </child>
                 <child type="overlay">
                   <object class="GtkRevealer" id="dock_revealer">
@@ -959,7 +963,7 @@
                         </child>
                         <child>
                           <object class="GtkToggleButton" id="btn_tool_shape">
-                            <property name="label" translatable="yes">Shapes</property>
+                            <property name="label" translatable="yes">Shape</property>
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="focus-on-click">False</property>
@@ -978,10 +982,26 @@
                           <object class="GtkSeparator">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
-                            <property name="margin-top">6</property>
-                            <property name="margin-bottom">6</property>
+                            <property name="orientation">vertical</property>
                             <style>
                               <class name="dock-sep" />
+                            </style>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkMenuButton" id="btn_stroke_menu">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="focus-on-click">False</property>
+                            <property name="tooltip-text" translatable="yes">Stroke thickness</property>
+                            <property name="always-show-image">True</property>
+                            <property name="popover">stroke_popover</property>
+                            <style>
+                              <class name="tool" />
                             </style>
                           </object>
                           <packing>
@@ -994,24 +1014,23 @@
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="valign">center</property>
-                            <property name="spacing">8</property>
-                            <property name="margin-start">4</property>
-                          </object>
-                          <packing>
-                            <property name="expand">False</property>
-                            <property name="fill">True</property>
-                          </packing>
-                        </child>
-                        <child>
-                          <object class="GtkButton" id="btn_custom_color">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <property name="focus-on-click">False</property>
-                            <property name="valign">center</property>
-                            <property name="tooltip-text" translatable="yes">Custom color</property>
-                            <style>
-                              <class name="ink-custom" />
-                            </style>
+                            <property name="spacing">4</property>
+                            <child>
+                              <object class="GtkButton" id="btn_custom_color">
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="focus-on-click">False</property>
+                                <property name="tooltip-text" translatable="yes">Custom color</property>
+                                <style>
+                                  <class name="ink-custom" />
+                                </style>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="pack-type">end</property>
+                              </packing>
+                            </child>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1022,29 +1041,9 @@
                           <object class="GtkSeparator">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
-                            <property name="margin-top">6</property>
-                            <property name="margin-bottom">6</property>
+                            <property name="orientation">vertical</property>
                             <style>
                               <class name="dock-sep" />
-                            </style>
-                          </object>
-                          <packing>
-                            <property name="expand">False</property>
-                            <property name="fill">True</property>
-                          </packing>
-                        </child>
-                        <child>
-                          <object class="GtkMenuButton" id="btn_stroke_menu">
-                            <property name="label" translatable="yes">Stroke</property>
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <property name="focus-on-click">False</property>
-                            <property name="tooltip-text" translatable="yes">Stroke thickness</property>
-                            <property name="always-show-image">True</property>
-                            <property name="direction">up</property>
-                            <property name="popover">stroke_popover</property>
-                            <style>
-                              <class name="tool" />
                             </style>
                           </object>
                           <packing>
@@ -1054,31 +1053,14 @@
                         </child>
                         <child>
                           <object class="GtkMenuButton" id="btn_page_menu">
-                            <property name="label" translatable="yes">Page</property>
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="focus-on-click">False</property>
-                            <property name="tooltip-text" translatable="yes">Page actions</property>
+                            <property name="tooltip-text" translatable="yes">Page</property>
                             <property name="always-show-image">True</property>
-                            <property name="direction">up</property>
                             <property name="popover">page_popover</property>
                             <style>
                               <class name="tool" />
-                            </style>
-                          </object>
-                          <packing>
-                            <property name="expand">False</property>
-                            <property name="fill">True</property>
-                          </packing>
-                        </child>
-                        <child>
-                          <object class="GtkSeparator">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <property name="margin-top">6</property>
-                            <property name="margin-bottom">6</property>
-                            <style>
-                              <class name="dock-sep" />
                             </style>
                           </object>
                           <packing>
@@ -1092,6 +1074,7 @@
                             <property name="can-focus">False</property>
                             <property name="focus-on-click">False</property>
                             <property name="tooltip-text" translatable="yes">Hide toolbar</property>
+                            <property name="always-show-image">True</property>
                             <style>
                               <class name="ib" />
                             </style>

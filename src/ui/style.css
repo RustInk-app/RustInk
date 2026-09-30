@@ -78,18 +78,31 @@ popover, popover.background {
 button.pop-item { padding: 8px 12px; border-radius: 12px; font-weight: 700; }
 
 /* ---------- barra laterale pagine ---------- */
-.sidebar { background-color: @desk2; border: 2px solid gray; }
-.sidebar-head { padding: 8px 10px; }
-.sidebar-head label { color: @text; font-weight: 800; }
-scrolledwindow { border: none; background-color: transparent; }
+/* ---------- barra laterale pagine ---------- */
+.sidebar { background-color: @desk2; border-right: 1px solid @line; }
 #page_list, #page_list row { background-color: transparent; color: @text; }
-#page_list row { margin: 6px 10px; padding: 4px; border-radius: 8px; }
-#page_list row:hover { background-color: alpha(@text, 0.12); }
-#page_list row:selected { background-color: alpha(@accent, 0.28); box-shadow: inset 0 0 0 3px @accent; color: @text; }
-paned > separator { background-color: @border; min-width: 1px; }
-scrollbar { background-color: transparent; border: none; }
-scrollbar slider { background-color: @border; border-radius: 8px; min-width: 8px; min-height: 8px; }
-scrollbar slider:hover { background-color: @text; }
+#page_list row { margin: 0; padding: 14px 0 6px; border-radius: 0; }
+#page_list row:hover, #page_list row:selected { background-color: transparent; box-shadow: none; }
+
+.page-thumb { border-radius: 3px; margin: 6px; }
+#page_list row:hover .page-thumb    { box-shadow: 0 0 0 2px @desk2, 0 0 0 4px @border; }
+#page_list row:selected .page-thumb { box-shadow: 0 0 0 2px @desk2, 0 0 0 5px @accent; }
+
+.page-num { font-size: 13px; font-weight: 700; color: @muted; padding: 1px 9px; min-width: 24px; border-radius: 999px; }
+#page_list row:selected .page-num { background-color: @accent; color: @on_accent; }
+
+button.add-page {
+    background-color: transparent; border: 2px solid @line; border-radius: 8px;
+    margin: 6px 30px 16px; min-height: 40px; padding: 0; color: @muted;
+}
+button.add-page:hover { background-color: @panel; border-color: @border; color: @text; }
+
+button.sidebar-handle {
+    min-width: 26px; min-height: 44px; padding: 0; border-radius: 999px;
+    background-color: @btn; border: 1px solid @border;
+}
+button.sidebar-handle:hover { background-color: @btn_hover; border-color: @text; }
+.page-bk-name { color: @muted; font-size: 12px; }
 
 /* ---------- barra di stato, campi, slider ---------- */
 .status-row { background-color: @panel; padding: 6px 16px; box-shadow: 0 -2px 0 @border; }

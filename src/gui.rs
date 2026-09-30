@@ -362,13 +362,6 @@ fn setup_menus(
         sidebar_container.set_visible(item.is_active());
     }));
 
-    let btn_close_sidebar: gtk::Button = builder
-        .object("btn_close_sidebar")
-        .expect("X button not found");
-    btn_close_sidebar.connect_clicked(glib::clone!(@weak view_sidebar => move |_| {
-        view_sidebar.set_active(false);
-    }));
-
     let bg_ruled: gtk::RadioMenuItem = builder.object("ruled_option").unwrap();
     let bg_plain: gtk::RadioMenuItem = builder.object("plain_option").unwrap();
     let bg_grid: gtk::RadioMenuItem = builder.object("grid_option").unwrap();

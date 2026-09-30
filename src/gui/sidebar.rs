@@ -18,6 +18,12 @@ lazy_static::lazy_static! {
     ];
 }
 
+fn select_page_row(lb: &gtk::ListBox, idx: i32) {
+    if let Some(row) = lb.row_at_index(idx) {
+        lb.select_row(Some(&row));
+    }
+}
+
 pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>>) -> gtk::ListBox {
     let sidebar_scrolled: gtk::ScrolledWindow = builder.object("first_panel_sidebar").expect("first_panel_sidebar non trovata");
     let sidebar_container: gtk::Box = builder.object("sidebar_container").expect("sidebar_container non trovata");
@@ -29,6 +35,10 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     page_listbox.set_widget_name("page_list");
     sidebar_scrolled.add(&page_listbox);
 
+        if let Some(spin) = builder.object::<gtk::SpinButton>("spin_page") {
+        let lb = page_listbox.clone();
+        spin.connect_value_changed(move |sp| select_page_row(&lb, sp.value() as i32 - 1));
+    }
     
     let search_entry = gtk::SearchEntry::new();
     search_entry.set_placeholder_text(Some("Search in bookmarks..."));
@@ -212,16 +222,19 @@ pub fn refresh_sidebar(
         let row = gtk::ListBoxRow::new();
         let event_box = gtk::EventBox::new();
         
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        vbox.set_margin_top(12);
-        vbox.set_margin_bottom(12);
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        vbox.set_margin_top(6);
+        vbox.set_margin_bottom(6);
         vbox.set_halign(gtk::Align::Center);
         
         let thumb_canvas = gtk::DrawingArea::new();
-        thumb_canvas.set_size_request(100, 140); 
+        thumb_canvas.set_size_request(100, 140);
+        let thumb_frame = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        thumb_frame.style_context().add_class("page-thumb");
+        thumb_frame.set_halign(gtk::Align::Center);
+        thumb_frame.pack_start(&thumb_canvas, false, false, 0);
         
-        
-        let mut page_label = format!("Page {}", i + 1);
+        let mut bk_name = String::from("Bookmark");
         let mut is_bk = false;
         let mut current_page_id = -1;
 
@@ -237,7 +250,7 @@ pub fn refresh_sidebar(
                     is_bk = b_val != 0;
                     if is_bk {
                         if let Some(name) = b_name {
-                            page_label = name;
+                            bk_name = name;
                         }
                     }
                 }
@@ -275,14 +288,20 @@ pub fn refresh_sidebar(
 
 
         
-        let label = gtk::Label::new(Some(&page_label));
-        label.set_line_wrap(true);
-        label.set_max_width_chars(15);
-        label.set_justify(gtk::Justification::Center);
+        let num = gtk::Label::new(Some(&(i + 1).to_string()));
+        num.style_context().add_class("page-num");
+        num.set_halign(gtk::Align::Center);
 
         let label_box = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         label_box.set_halign(gtk::Align::Center);
-        label_box.pack_start(&label, true, true, 0);
+        if is_bk {
+            let name = gtk::Label::new(Some(&bk_name));
+            name.style_context().add_class("page-bk-name");
+            name.set_line_wrap(true);
+            name.set_max_width_chars(12);
+            name.set_justify(gtk::Justification::Center);
+            label_box.pack_start(&name, true, true, 0);
+        }
 
         
         if is_bk {
@@ -318,8 +337,9 @@ pub fn refresh_sidebar(
             label_box.pack_start(&btn_rm, false, false, 0);
         }
 
-        vbox.pack_start(&thumb_canvas, false, false, 0);
-        vbox.pack_start(&label_box, false, false, 0);
+        vbox.pack_start(&thumb_frame, false, false, 0);
+        vbox.pack_start(&num, false, false, 0);
+        if is_bk { vbox.pack_start(&label_box, false, false, 0); }
         event_box.add(&vbox);
         row.add(&event_box);
         
@@ -526,4 +546,7 @@ pub fn refresh_sidebar(
         listbox.add(&row);
     }
     listbox.show_all();
+    select_page_row(listbox, state.borrow().current_page as i32);
+
+
 }
