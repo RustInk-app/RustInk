@@ -25,17 +25,8 @@ pub(crate) fn setup_sidebar(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
     for child in sidebar_scrolled.children() { sidebar_scrolled.remove(&child); }
 
     let page_listbox = gtk::ListBox::new();
-    let css_provider = gtk::CssProvider::new();
-    let dark_css = b"
-        list { background-color: #2e2e34; color: white; }
-        row { background-color: #2e2e34; }  
-        row:hover { background-color: #3e3e44; } 
-        row:selected { background-color: #4a90d9; color: white; } 
-    ";
-    if let Err(e) = css_provider.load_from_data(dark_css) {
-        eprintln!("Error loading sidebar's CSS: {}", e);
-    }
-    page_listbox.style_context().add_provider(&css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    
+    page_listbox.set_widget_name("page_list");
     sidebar_scrolled.add(&page_listbox);
 
     

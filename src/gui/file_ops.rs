@@ -88,15 +88,13 @@ pub fn on_import_pdf_clicked(
     lbl_tot: &gtk::Label,
     page_listbox: &gtk::ListBox,
 ) {
-    let dialog = gtk::FileChooserDialog::new(
+    let dialog = gtk::FileChooserNative::new(
         Some("Import PDF"),
         Some(window),
         gtk::FileChooserAction::Open,
+        Some("Import"),
+        Some("Cancel"),
     );
-    dialog.add_buttons(&[
-        ("Cancel", gtk::ResponseType::Cancel),
-        ("Import", gtk::ResponseType::Accept),
-    ]);
 
     let filter = gtk::FileFilter::new();
     filter.add_pattern("*.pdf");
@@ -207,15 +205,13 @@ pub fn on_import_pdf_clicked(
 }
 
 pub fn on_export_pdf_clicked(window: &gtk::Window, state: &Rc<RefCell<AppState>>) {
-    let dialog = gtk::FileChooserDialog::new(
+    let dialog = gtk::FileChooserNative::new(
         Some("Export PDF"),
         Some(window),
         gtk::FileChooserAction::Save,
+        Some("Export"),
+        Some("Cancel"),
     );
-    dialog.add_buttons(&[
-        ("Cancel", gtk::ResponseType::Cancel),
-        ("Export", gtk::ResponseType::Accept),
-    ]);
     dialog.set_current_name("test_document.pdf");
 
     if dialog.run() == gtk::ResponseType::Accept {
@@ -399,9 +395,7 @@ pub(crate) fn setup_file_ops(
             gtk::ResponseType::Cancel => false,
             gtk::ResponseType::No => true,
             gtk::ResponseType::Yes => {
-                let dialog = gtk::FileChooserDialog::new(Some("Save document"), Some(&window), gtk::FileChooserAction::Save);
-                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                dialog.add_button("Save", gtk::ResponseType::Accept);
+                let dialog = gtk::FileChooserNative::new(Some("Save document"), Some(&window), gtk::FileChooserAction::Save, Some("Save"), Some("Cancel"));
                 dialog.set_do_overwrite_confirmation(true);
                 if let Some(p) = state.borrow().bundle_path.clone() { dialog.set_filename(p); }
                 else { dialog.set_current_name("document.rustInk"); }
@@ -431,9 +425,7 @@ pub(crate) fn setup_file_ops(
     });
 
     let do_save_as = clone!(@strong state, @strong window, @strong execute_save_background => move || {
-        let dialog = gtk::FileChooserDialog::new(Some("Save with name"), Some(&window), gtk::FileChooserAction::Save);
-        dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-        dialog.add_button("Save", gtk::ResponseType::Accept);
+        let dialog = gtk::FileChooserNative::new(Some("Save with name"), Some(&window), gtk::FileChooserAction::Save, Some("Save"), Some("Cancel"));
         dialog.set_do_overwrite_confirmation(true);
         if let Some(p) = state.borrow().bundle_path.clone() { dialog.set_filename(p); }
         else { dialog.set_current_name("document.rustInk"); }
@@ -803,13 +795,13 @@ pub(crate) fn setup_window_close(window: &gtk::Window, state: &Rc<RefCell<AppSta
             match resp {
                 gtk::ResponseType::Cancel => return Propagation::Stop,
                 gtk::ResponseType::Yes => {
-                    let save_dialog = gtk::FileChooserDialog::new(
+                    let save_dialog = gtk::FileChooserNative::new(
                         Some("Save document"),
                         Some(&w),
                         gtk::FileChooserAction::Save,
+                        Some("Save"),
+                        Some("Cancel"),
                     );
-                    save_dialog.add_button("Cancel", gtk::ResponseType::Cancel);
-                    save_dialog.add_button("Save", gtk::ResponseType::Accept);
                     save_dialog.set_do_overwrite_confirmation(true);
                     let filter = gtk::FileFilter::new();
                     filter.set_name(Some("rustInk (*.rustInk)"));

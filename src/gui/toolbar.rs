@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::gui::refresh_sidebar;
 use crate::gui::state::AppState;
-use crate::gui::utils::{load_icon, make_color_button};
+use crate::gui::utils::make_color_button;
 
 use crate::models::color::*;
 use crate::models::page::*;
@@ -24,51 +24,21 @@ pub(crate) fn setup_toolbar(
     lbl_tot: &gtk::Label,
     page_listbox: &gtk::ListBox,
 ) -> (gtk::Button, gtk::Button) {
-    let tool_bar: gtk::Toolbar = builder.object("toolbar").expect("Toolbar not found");
-
-    macro_rules! add_item {
-        ($widget:expr) => {
-            let item = gtk::ToolItem::new();
-            item.add($widget);
-            tool_bar.insert(&item, -1);
+    
+    macro_rules! obj {
+        ($ty:ty, $id:expr) => {
+            builder.object::<$ty>($id).expect(concat!($id, " not found in menu.glade"))
         };
     }
+    let color_box: gtk::Box = obj!(gtk::Box, "color_box");
 
-    macro_rules! add_sep {
-        () => {
-            let sep = gtk::SeparatorToolItem::new();
-            tool_bar.insert(&sep, -1);
-        };
-    }
-
-    let make_btn = |icon_name: &str, tooltip: &str| -> gtk::Button {
-        let btn = gtk::Button::new();
-        btn.set_image(Some(&load_icon(icon_name)));
-        btn.set_tooltip_text(Some(tooltip));
-        btn.set_always_show_image(true);
-        btn.set_relief(gtk::ReliefStyle::None);
-        btn
-    };
-    let make_toggle = |icon_name: &str, tooltip: &str| -> gtk::ToggleButton {
-        let btn = gtk::ToggleButton::new();
-        btn.set_image(Some(&load_icon(icon_name)));
-        btn.set_tooltip_text(Some(tooltip));
-        btn.set_always_show_image(true);
-        btn.set_relief(gtk::ReliefStyle::None);
-        btn
-    };
-
-    let btn_save = make_btn("document-save.svg", "Save document (.rustInk)");
-    let btn_open = make_btn("document-open.svg", "Open document");
-    add_item!(&btn_save);
-    add_item!(&btn_open);
-    add_sep!();
-
-    let btn_tool_pen = make_toggle("tool-pencil.svg", "Pen");
-    let btn_tool_eraser = make_toggle("tool-eraser.svg", "Eraser");
-    let btn_tool_text = make_toggle("tool-text.svg", "Text");
-    let btn_tool_select = make_toggle("select-rect.svg", "Selection");
-    let btn_tool_shape = make_toggle("tool-shape.svg", "Shapes");
+    let btn_save: gtk::Button = obj!(gtk::Button, "btn_save");
+    let btn_open: gtk::Button = obj!(gtk::Button, "btn_open");
+    let btn_tool_pen: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_tool_pen");
+    let btn_tool_eraser: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_tool_eraser");
+    let btn_tool_text: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_tool_text");
+    let btn_tool_select: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_tool_select");
+    let btn_tool_shape: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_tool_shape");
     btn_tool_pen.set_active(true);
 
     {
@@ -76,12 +46,16 @@ pub(crate) fn setup_toolbar(
         let be = btn_tool_eraser.clone();
         let bt = btn_tool_text.clone();
         let bs = btn_tool_select.clone();
+        let bshape = btn_tool_shape.clone();
         btn_tool_pen.connect_toggled(move |b| {
             if b.is_active() {
                 be.set_active(false);
                 bt.set_active(false);
                 bs.set_active(false);
-                s.borrow_mut().active_tool = Tool::Pen;
+                bshape.set_active(false);
+                let mut st = s.borrow_mut();
+                st.active_tool = Tool::Pen;
+                st.selected_indices.clear();
             }
         });
     }
@@ -90,12 +64,16 @@ pub(crate) fn setup_toolbar(
         let bp = btn_tool_pen.clone();
         let bt = btn_tool_text.clone();
         let bs = btn_tool_select.clone();
+        let bshape = btn_tool_shape.clone();
         btn_tool_eraser.connect_toggled(move |b| {
             if b.is_active() {
                 bp.set_active(false);
                 bt.set_active(false);
                 bs.set_active(false);
-                s.borrow_mut().active_tool = Tool::Eraser;
+                bshape.set_active(false);
+                let mut st = s.borrow_mut();
+                st.active_tool = Tool::Eraser;
+                st.selected_indices.clear();
             }
         });
     }
@@ -104,12 +82,16 @@ pub(crate) fn setup_toolbar(
         let bp = btn_tool_pen.clone();
         let be = btn_tool_eraser.clone();
         let bs = btn_tool_select.clone();
+        let bshape = btn_tool_shape.clone();
         btn_tool_text.connect_toggled(move |b| {
             if b.is_active() {
                 bp.set_active(false);
                 be.set_active(false);
                 bs.set_active(false);
-                s.borrow_mut().active_tool = Tool::Text;
+                bshape.set_active(false);
+                let mut st = s.borrow_mut();
+                st.active_tool = Tool::Text;
+                st.selected_indices.clear();
             }
         });
     }
@@ -118,11 +100,14 @@ pub(crate) fn setup_toolbar(
         let bp = btn_tool_pen.clone();
         let be = btn_tool_eraser.clone();
         let bt = btn_tool_text.clone();
+        let bshape = btn_tool_shape.clone();
+
         btn_tool_select.connect_toggled(move |b| {
             if b.is_active() {
                 bp.set_active(false);
                 be.set_active(false);
                 bt.set_active(false);
+                bshape.set_active(false);
                 let mut st = s.borrow_mut();
                 st.active_tool = Tool::Select;
                 st.selected_index = None;
@@ -164,25 +149,17 @@ pub(crate) fn setup_toolbar(
                 if !matches!(s.borrow().active_tool, Tool::Shape(_)) {
                     s.borrow_mut().active_tool = Tool::Shape(ShapeKind::Line);
                 }
-                menu.popup_at_widget(b, gtk::gdk::Gravity::SouthWest, gtk::gdk::Gravity::NorthWest, None);
+                menu.popup_at_widget(b, gtk::gdk::Gravity::NorthWest, gtk::gdk::Gravity::SouthWest, None);
             }
         });
     }
-
-    add_item!(&btn_tool_pen);
-    add_item!(&btn_tool_eraser);
-    add_item!(&btn_tool_text);
-    add_item!(&btn_tool_select);
-    add_item!(&btn_tool_shape);
-    add_sep!();
-
     let preset_colors = vec![
-        (Color::new(0.0, 0.0, 0.0), "Black"),
-        (Color::new(0.85, 0.15, 0.15), "Red"),
-        (Color::new(0.15, 0.35, 0.85), "Blue"),
-        (Color::new(0.1, 0.65, 0.2), "Green"),
-        (Color::new(0.95, 0.6, 0.05), "Orange"),
-        (Color::new(0.55, 0.15, 0.75), "Purple"),
+        (Color::new(0.169, 0.153, 0.149), "Sepia"),    
+        (Color::new(0.706, 0.314, 0.169), "Rust"),     
+        (Color::new(0.184, 0.400, 0.451), "Petrol"),   
+        (Color::new(0.788, 0.541, 0.169), "Ochre"),    
+        (Color::new(0.420, 0.478, 0.227), "Olive"),    
+        (Color::new(0.478, 0.180, 0.227), "Burgundy"), 
     ];
 
     let mut color_toggles = Vec::new();
@@ -282,7 +259,7 @@ pub(crate) fn setup_toolbar(
                 }
             }
         });
-        add_item!(btn);
+        color_box.pack_start(btn, false, false, 0);
     }
     
     
@@ -290,7 +267,7 @@ pub(crate) fn setup_toolbar(
         first_btn.set_active(true);
     }
 
-    let btn_custom_color = gtk::Button::with_label("🎨");
+    let btn_custom_color: gtk::Button = obj!(gtk::Button, "btn_custom_color");
     {
         let s = state.clone();
         let w = window.clone();
@@ -363,12 +340,9 @@ pub(crate) fn setup_toolbar(
             unsafe { dialog.destroy(); }
         });
     }
-    add_item!(&btn_custom_color);
-    add_sep!();
-    
-    let btn_thin = make_toggle("thickness-fine.svg", "Thin");
-    let btn_med = make_toggle("thickness-medium.svg", "Medium");
-    let btn_thick = make_toggle("thickness-thick.svg", "Thick");
+    let btn_thin: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_thin");
+    let btn_med: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_med");
+    let btn_thick: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_thick");
     btn_med.set_active(true);
 
     {
@@ -407,19 +381,10 @@ pub(crate) fn setup_toolbar(
             }
         });
     }
-    add_item!(&btn_thin);
-    add_item!(&btn_med);
-    add_item!(&btn_thick);
-
-    let btn_add_page = make_btn("page-add.svg", "Add new page");
+    let btn_add_page: gtk::Button = obj!(gtk::Button, "btn_add_page");
     
-    let btn_bookmark = gtk::ToggleButton::new();
-    btn_bookmark.set_image(Some(&gtk::Image::from_icon_name(Some("bookmark-new"), gtk::IconSize::Button)));
-    btn_bookmark.set_tooltip_text(Some("Add/Remove bookmarks"));
-    btn_bookmark.set_always_show_image(true);
-    btn_bookmark.set_relief(gtk::ReliefStyle::None);
-
-    let btn_del_page = make_btn("page-delete.svg", "Delete current page");
+    let btn_bookmark: gtk::ToggleButton = obj!(gtk::ToggleButton, "btn_bookmark");
+    let btn_del_page: gtk::Button = obj!(gtk::Button, "btn_del_page");
 
     {
         let s = state.clone();
@@ -518,12 +483,6 @@ pub(crate) fn setup_toolbar(
             cb.set_active(is_bk);
         });
     }));
-
-    add_sep!();
-    add_item!(&btn_add_page);
-    add_item!(&btn_del_page);
-    add_item!(&btn_bookmark);
-
     {
         let s = state.clone();
         let sp = spin_page.clone();
@@ -635,6 +594,9 @@ pub(crate) fn setup_toolbar(
         }
     });
     state.borrow_mut().update_toolbar_ui = Some(update_ui);
+
+    
+    crate::gui::utils::setup_chrome(builder, canvas);
 
     (btn_save, btn_open)
 }

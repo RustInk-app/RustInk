@@ -1,162 +1,133 @@
-#pdfFloatingToolGrid {
-    padding: 7px;
+/* rustInk — stile "ruggine e inchiostro", alto contrasto.
+   Colori da palette-light.css / palette-dark.css (@define-color). */
+
+* { font-family: "Bricolage Grotesque", "Segoe UI", "Cantarell", sans-serif; }
+window, .background { background-color: @desk; color: @text; }
+label { color: @text; }
+
+/* ---------- pulsanti: sempre con sfondo e bordo ben visibili ---------- */
+button {
+    background-image: none; background-color: @btn; color: @text;
+    border: 1px solid @border; border-radius: 12px; padding: 6px 12px;
+    box-shadow: none; text-shadow: none; -gtk-icon-shadow: none; transition: 120ms ease;
 }
-
-/*Style the Floating Toolbox!*/
-#floatingToolbox > box,
-#pdfFloatingToolGrid {
-	background-color: white;
-	border-radius: 12px;
-
-	box-shadow: 0px 0px 3px rgba(0, 0, 0, 0.4);
-
-	/* Add a margin. If we don't have this, Gtk clips the shadow!  */
-	margin: 7px;
+button:hover { background-color: @btn_hover; border-color: @text; }
+button:active { background-color: @line; }
+button:disabled { opacity: 0.45; }
+button.ib { padding: 6px; min-width: 24px; min-height: 24px; }
+button.flat-btn { font-weight: 700; border-radius: 999px; padding: 6px 16px; }
+button.suggested-action {
+    background-color: @accent; color: @on_accent; border-color: @accent;
+    border-radius: 999px; padding: 6px 18px; font-weight: 800;
 }
-
-#floatingToolbox box toolbar {
-	background-color: rgba(255, 255, 255, 0);
+button.suggested-action label { color: @on_accent; }
+button.suggested-action:hover { background-color: shade(@accent, 1.12); border-color: @text; }
+button:checked, button.tool:checked, button.pop-item:checked {
+    background-color: @accent; border-color: @accent; color: @on_accent;
 }
+button:checked label { color: @on_accent; }
 
-#floatingToolbox button {
-	background-color: rgba(255, 255, 255, 0.8);
-	border-radius: 12px;
+/* ---------- riga in alto: logo + menu ---------- */
+.header-row { padding: 4px 10px 4px 0; }
+menubar { background-color: transparent; background-image: none; box-shadow: none; }
+menubar > menuitem { padding: 6px 14px; border-radius: 10px; font-weight: 700; color: @text; border: 1px solid transparent; }
+menubar > menuitem:hover, menubar > menuitem:selected, menubar > menuitem:active, menubar > menuitem:checked {
+    background-color: @btn_hover; border-color: @border;
 }
-
-#pdfFloatingToolGrid button {
-	background: rgba(255, 255, 255, 0.8);
-	border: 12px;
+/* testo sempre bianco, anche con il menu aperto o sotto il mouse */
+menubar > menuitem label,
+menubar > menuitem:hover label, menubar > menuitem:selected label,
+menubar > menuitem:active label, menubar > menuitem:checked label { color: @text; }
+menu, .menu, .popup {
+    background-color: @panel; color: @text; border: 2px solid @border;
+    border-radius: 14px; padding: 6px;
 }
+menuitem { padding: 7px 14px; border-radius: 8px; color: @text; }
+menuitem label, menuitem accelerator, menuitem check, menuitem radio { color: @text; }
+menuitem:hover { background-color: @accent; }
+menuitem:hover label, menuitem:hover accelerator, menuitem:hover check, menuitem:hover radio { color: @on_accent; }
+separator { background-color: @border; min-height: 1px; min-width: 1px; }
 
-#pdfFloatingToolGrid button:hover {
-	border-radius: 12px;
-	background: rgba(245, 245, 245, 0.8);
-	box-shadow: inset 0px 0px 2px gray;
+/* ---------- dock ---------- */
+.dock {
+    background-color: @panel; border-radius: 26px; padding: 8px 12px;
+    margin: 20px;
+    box-shadow: 0 6px 14px alpha(black, 0.32), 0 0 0 2px @border;
 }
-
-#floatingToolbox button:checked {
-	border-color: #0078d7;
-	box-shadow: inset 0px 0px 3px #0078d7;
-
-	transition: background-color 0.5s ease, border-color 0.5s ease, margin 0.3s ease;
+.dock-sep { background-color: @border; min-width: 1px; margin: 6px 6px; }
+button.tool { padding: 7px 12px; border-radius: 16px; font-weight: 700; }
+button.show-dock {
+    border-radius: 999px; padding: 8px 18px; font-weight: 700;
+    box-shadow: 0 8px 20px alpha(black, 0.35);
 }
-
-#floatingToolbox toolbar,
-#pdfFloatingToolGrid button {
-    /*
-      The Adaptia GTK theme adds box-shadows to toolbars.
-      Remove them to avoid horizontal lines that extend outside
-      the edge of the floating toolbox.
-     */
-
-    box-shadow: none;
+button.ink-swatch { background-color: transparent; border: 2px solid transparent; padding: 2px; border-radius: 999px; min-width: 20px; min-height: 20px; }
+button.ink-swatch:hover { background-color: transparent; border-color: @muted; }
+button.ink-swatch:checked { background-color: transparent; border-color: @text; }
+button.ink-custom {
+    background-image: linear-gradient(135deg, #e0364a, #f0a020, #1f9d6b, #3b4bdb, #8a3fd1);
+    border: 2px solid @border; min-width: 22px; min-height: 22px; padding: 0; border-radius: 999px;
 }
+button.ink-custom:hover { border-color: @text; }
 
-window.darkMode #floatingToolbox button,
-window.darkMode #pdfFloatingToolGrid button {
-	background: rgba(55, 53, 53, 0.5);
-	border: none;
+/* ---------- popover ---------- */
+popover, popover.background {
+    background-color: @panel; color: @text; border: 2px solid @border;
+    border-radius: 16px; box-shadow: 0 16px 36px alpha(black, 0.45);
 }
+.pop-title { color: @muted; font-size: 12px; font-weight: 700; }
+button.pop-item { padding: 8px 12px; border-radius: 12px; font-weight: 700; }
 
-window.darkMode #floatingToolbox button:checked {
-	background: rgba(85, 85, 95, 0.1);
-	border-color: #0078d7;
-	box-shadow: 0px 0px 3px #0078d7;
+/* ---------- barra laterale pagine ---------- */
+.sidebar { background-color: @desk2; border: 2px solid gray; }
+.sidebar-head { padding: 8px 10px; }
+.sidebar-head label { color: @text; font-weight: 800; }
+scrolledwindow { border: none; background-color: transparent; }
+#page_list, #page_list row { background-color: transparent; color: @text; }
+#page_list row { margin: 6px 10px; padding: 4px; border-radius: 8px; }
+#page_list row:hover { background-color: alpha(@text, 0.12); }
+#page_list row:selected { background-color: alpha(@accent, 0.28); box-shadow: inset 0 0 0 3px @accent; color: @text; }
+paned > separator { background-color: @border; min-width: 1px; }
+scrollbar { background-color: transparent; border: none; }
+scrollbar slider { background-color: @border; border-radius: 8px; min-width: 8px; min-height: 8px; }
+scrollbar slider:hover { background-color: @text; }
+
+/* ---------- barra di stato, campi, slider ---------- */
+.status-row { background-color: @panel; padding: 6px 16px; box-shadow: 0 -2px 0 @border; }
+spinbutton, entry {
+    background-image: none; background-color: @panel; color: @text;
+    border: 1px solid @border; border-radius: 8px; box-shadow: none; padding: 3px 8px;
 }
-
-window.darkMode #floatingToolbox > box,
-window.darkMode #pdfFloatingToolGrid  {
-	background-color: black;
-
-	/*
-	  Lighter gray shadow for better contrast on dark
-	  backgrounds.
-	*/
-	box-shadow: 0px 0px 5px rgba(90, 90, 90, 0.7);
+spinbutton button { border-radius: 6px; padding: 2px 6px; }
+scale trough { background-color: @border; min-height: 5px; border-radius: 3px; border: none; }
+scale trough highlight { background-color: @accent; border-radius: 3px; }
+scale slider {
+    background-image: none; background-color: @accent; border: 2px solid @panel;
+    box-shadow: 0 0 0 1px @border; min-width: 16px; min-height: 16px; margin: -7px; border-radius: 999px;
 }
+switch { background-color: @btn; border: 2px solid @border; border-radius: 999px; }
+switch:checked { background-color: @accent; border-color: @accent; }
+switch slider { background-color: @panel; border: 2px solid @border; border-radius: 999px; margin: 0; min-width: 22px; min-height: 22px; box-shadow: none; }
+switch:checked slider { border-color: @on_accent; }
 
-/* Add additional padding and a border to make editing toolbars easier. */
-toolbar.editing {
-	padding-top: 4px;
-	padding-bottom: 4px;
+/* ---------- combo box (Preferences) ---------- */
+combobox button.combo { padding: 7px 14px; min-width: 170px; font-weight: 700; }
+combobox arrow, combobox cellview { color: @text; }
 
-	border: 4px dashed orange;
-	border-radius: 3px;
+/* ---------- finestra Preferences ---------- */
+dialog, messagedialog, dialog .background { background-color: @panel; color: @text; }
+dialog button, messagedialog button { border-radius: 999px; padding: 7px 20px; font-weight: 700; }
+stacksidebar, stacksidebar list, stacksidebar scrolledwindow { background-color: @desk2; }
+stacksidebar { border-right: 2px solid @border; }
+stacksidebar row { padding: 14px 18px; margin: 6px 10px; border-radius: 10px; }
+stacksidebar row label { color: @text; font-weight: 700; font-size: 15px; }
+stacksidebar row:hover { background-color: @btn_hover; }
+stacksidebar row:selected { background-color: @accent; }
+stacksidebar row:selected label { color: @on_accent; }
+.prefs-h1 { font-size: 26px; font-weight: 800; color: @text; }
+.prefs-sub { color: @muted; font-size: 14px; }
+.card { background-color: @desk; border: 2px solid @border; border-radius: 16px; padding: 20px; }
+.card-title { font-size: 18px; font-weight: 800; }
+.card-label { font-size: 15px; font-weight: 600; }
 
-	box-shadow: inset -2px -2px 8px orange;
-}
-
-toolitem > box > label+label+button
-{
-	border-width:0;
-	box-shadow:none;
-	background-image:none;
-}
-
-toolbar button,
-popover.toolbar button {
-  padding:3px;
-}
-
-.orientationFormatBox > button > widget > box > image {
-	margin-left: 3px;
-	margin-right: 3px;
-}
-
-toolbar button:not(:checked):not(:active):not(:hover),
-popover.toolbar button:not(:checked):not(:active):not(:hover){
-  border-color:transparent;
-  box-shadow:none;
-  background-color:transparent;
-  background-image:none;
-}
-
-radiobutton.invisible radio {
-  color:transparent;
-  background-color:transparent;
-  background-image:none;
-  outline-style:none;
-  border-style:none;
-  box-shadow:none;
-}
-
-/* A spacer is a transparent separator with expand == true */
-separator.spacer {
-  color:transparent;
-  background-color:transparent;
-  background-image:none;
-  outline-style:none;
-  border-style:none;
-  box-shadow:none;
-}
-
-notebook frame>label {
-    color: #666;
-    font-weight: bold;
-}
-
-menubar, toolbar {
-    -GtkWidget-window-dragging: false
-}
-
-label.setting-button-indicator {
-    border: 1px solid gray;
-    border-radius: 3px;
-    margin: 1px;
-    padding: 2px;
-}
-
-label.setting-button-indicator.pressed {
-    background-color: red;
-}
-
-label.setting-touch-indicator {
-    border: none;
-    background: radial-gradient(circle at center, alpha(gray,.7) 0%, alpha(gray,.7) 20%, alpha(gray, .1) 60%, alpha(gray, 0.) 100%);
-    border-radius: 50%;
-    margin: 1px;
-    padding: 10px;
-}
-label.setting-touch-indicator.pressed {
-    background: radial-gradient(circle at center, red 0%, red 20%, alpha(red, .1) 60%, alpha(red, 0.) 100%);
-}
+tooltip.background { background-color: @text; color: @desk; border-radius: 8px; }
+tooltip label { color: @desk; }

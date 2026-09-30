@@ -17,7 +17,7 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-gnu
-            arch_name: windows-setup-AMD64
+            arch_name: windows-setup-x86_64
             msystem: UCRT64
             msys_pkg: mingw-w64-ucrt-x86_64
             ext: exe

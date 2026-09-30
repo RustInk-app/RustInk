@@ -271,7 +271,8 @@ pub fn setup_canvas_drawing(canvas: &gtk::DrawingArea, state: &Rc<RefCell<AppSta
         let w = alloc.width() as f64;
         
         
-        cr.set_source_rgb(0.18, 0.18, 0.22);
+        let (dr, dg, db) = crate::gui::utils::desk_rgb();
+        cr.set_source_rgb(dr, dg, db);
         let _ = cr.paint();
 
         let zoom = s.borrow().zoom;

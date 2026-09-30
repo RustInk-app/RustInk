@@ -1,0 +1,12 @@
+/* rustInk: tema scuro fisso. Carbone del pennino + ruggine del logo, testo bianco. */
+@define-color desk      #1f1a18;
+@define-color desk2     #141110;
+@define-color panel     #2f2926;
+@define-color text      #ffffff;
+@define-color muted     #c9bbb2;
+@define-color line      #4f443f;
+@define-color border    #a3928a;
+@define-color btn       #3d3531;
+@define-color btn_hover #54494a;
+@define-color accent    #c04f27;
+@define-color on_accent #ffffff;

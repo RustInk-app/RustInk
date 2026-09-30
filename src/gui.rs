@@ -327,6 +327,11 @@ fn setup_preferences_dialog(builder: &gtk::Builder, state: &Rc<RefCell<AppState>
         *trigger1.borrow_mut() = st.pref_trigger_1.clone();
         *trigger2.borrow_mut() = st.pref_trigger_2.clone();
 
+        
+        if let Some(mon) = gtk::gdk::Display::default().and_then(|d| d.primary_monitor()) {
+            let g = mon.geometry();
+            dialog.set_default_size((g.width() as f64 * 0.85) as i32, (g.height() as f64 * 0.85) as i32);
+        }
         dialog.show_all();
     }));
 }
@@ -347,10 +352,10 @@ fn setup_menus(
     sidebar_container.set_no_show_all(true);
     
     
-    sidebar_container.set_visible(false);
+    sidebar_container.set_visible(true);
     
     
-    view_sidebar.set_active(false);
+    view_sidebar.set_active(true);
 
     
     view_sidebar.connect_toggled(glib::clone!(@weak sidebar_container => move |item| {

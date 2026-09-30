@@ -1,22 +1,16 @@
-
 use crate::models::textbox::*;
 use crate::models::page::*;
 use crate::models::stroke::*;
 use crate::models::select::*;
-
 use crate::save_handler::db::*;
-
 use gtk::prelude::*;
 use gtk::gdk;
 use glib::Propagation;
-
 use std::cell::RefCell;
 use std::rc::Rc;
-use glib::clone; 
-
+use glib::clone;
 use crate::gui::state::*;
 use crate::gui::drawing::*;
-
 
 pub(crate) fn setup_canvas_events(
     canvas: &gtk::DrawingArea,
@@ -25,14 +19,13 @@ pub(crate) fn setup_canvas_events(
     spin_page: &gtk::SpinButton,
     lbl_tot: &gtk::Label
 ) {
-    
-    
     let s = state.clone();
+
     {
     canvas.connect_button_press_event(clone!(@strong state, @strong window as w, @strong canvas as c => move |_, event| {
         let button = event.button();
-
         let btn_trigger = EventTrigger::Mouse(button);
+        
         let target_tool = {
             let st = state.borrow();
             if Some(&btn_trigger) == st.pref_trigger_1.as_ref() { st.pref_tool_1.clone() }
@@ -41,7 +34,6 @@ pub(crate) fn setup_canvas_events(
         };
 
         if let Some(tool) = target_tool {
-            
             let (needs_switch, current, cb) = {
                 let st = state.borrow();
                 if st.active_temp_trigger.is_none() && st.active_tool != tool {
@@ -56,11 +48,17 @@ pub(crate) fn setup_canvas_events(
                 st_mut.previous_tool = Some(current);
                 st_mut.active_tool = tool.clone();
                 st_mut.active_temp_trigger = Some(btn_trigger);
+                
+                if tool != Tool::Select {
+                    st_mut.selected_indices.clear();
+                    st_mut.selected_index = None;
+                }
+                
                 drop(st_mut);
-
                 if let Some(f) = cb { f(&tool); }
                 c.queue_draw();
             }
+
             if button != 1 {
                 return Propagation::Stop;
             }
@@ -69,16 +67,13 @@ pub(crate) fn setup_canvas_events(
         if button != 1 { return Propagation::Proceed; }
 
         let (mx, my) = event.position();
-        
         let (ox, oy) = state.borrow().page_origin;
         let zoom = state.borrow().zoom;
         let tool = state.borrow().active_tool.clone();
 
-        
         let px = (mx - ox) / zoom;
         let py = (my - oy) / zoom;
 
-        
         if px < 0.0 || px > PAGE_W || py < 0.0 || py > PAGE_H {
             if tool == Tool::Select {
                 let mut st = state.borrow_mut();
@@ -94,38 +89,29 @@ pub(crate) fn setup_canvas_events(
             let mut st = state.borrow_mut();
             if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
                 if let ComponentPayload::RichText(ref block) = st.current_page_data.components[idx] {
-                    
                     let existing_text = block.spans.iter().map(|s| s.text.clone()).collect::<String>();
                     let existing_style = block.spans.first().map(|s| s.style.clone()).unwrap_or_default();
-                    
-                    drop(st); 
-                    
+                    drop(st);
                     
                     if let Some((new_text, new_style)) = crate::models::textbox::show_text_input_dialog(&w, &existing_style, &existing_text) {
                         let mut st_mut = state.borrow_mut();
-                        let mut invalidate_id = None; 
+                        let mut invalidate_id = None;
 
                         if let ComponentPayload::RichText(ref mut b) = st_mut.current_page_data.components[idx] {
-                            
                             b.spans = vec![TextSpan { text: new_text, style: new_style }];
-                            
-                            
                             invalidate_id = Some(format!("txt_{}", b.id_temporaneo));
                         }
-
                         
                         if let Some(id) = invalidate_id {
                             st_mut.image_cache.borrow_mut().remove(&id);
                         }
                     }
-                    return Propagation::Stop; 
+                    return Propagation::Stop;
                 }
             }
         }
 
-        match tool 
-        {
-            
+        match tool {
             Tool::Pen => {
                 let color = s.borrow().current_color.clone();
                 let width = s.borrow().current_width;
@@ -138,28 +124,20 @@ pub(crate) fn setup_canvas_events(
                 st.save_snapshot();
                 st.is_drawing = true;
                 if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
-                    if matches!(st.current_page_data.components[idx], ComponentPayload::PenStroke(_)) {
+                    if matches!(st.current_page_data.components[idx], ComponentPayload::PenStroke(_) | ComponentPayload::Shape(_)) {
                         st.current_page_data.components.remove(idx);
                         c.queue_draw();
                     }
                 }
             }
-
-            
             Tool::Text => {
-                
-                
                 let default_style = s.borrow().current_text_style.clone();
-                
                 if let Some((text, style)) = show_text_input_dialog(&w, &default_style, "") {
                     let mut st = s.borrow_mut();
                     st.current_text_style = style.clone();
                     st.text_id_counter += 1;
                     let id = format!("txt_{}", st.text_id_counter);
-
-                    
                     let est_width = (text.len() as f64 * style.size * 0.55).min(400.0).max(50.0);
-
                     let block = RichTextBlock {
                         id_temporaneo: id,
                         x: px,
@@ -173,12 +151,9 @@ pub(crate) fn setup_canvas_events(
                     w.set_title(&title);
                 }
             }
-
-            
             Tool::Select => {
                 let mut st = s.borrow_mut();
                 let mut handled = false;
-
                 
                 if st.selected_indices.len() == 1 {
                     let sel_idx = st.selected_indices[0];
@@ -206,14 +181,11 @@ pub(crate) fn setup_canvas_events(
                         if !st.selected_indices.contains(&idx) {
                             st.selected_indices = vec![idx];
                         }
-                        
-                        
                         st.selected_index = if st.selected_indices.len() == 1 {
                             Some(st.selected_indices[0])
                         } else {
                             None
                         };
-
                         let mut orig_positions = Vec::new();
                         for &s_idx in &st.selected_indices {
                             if let Some(comp) = st.current_page_data.components.get(s_idx) {
@@ -229,7 +201,7 @@ pub(crate) fn setup_canvas_events(
                         st.drag_mode = DragMode::Move { start_px: px, start_py: py, orig_positions };
                     } else {
                         st.selected_indices.clear();
-                        st.selected_index = None; 
+                        st.selected_index = None;
                         st.drag_mode = DragMode::Marquee { start_px: px, start_py: py, current_px: px, current_py: py };
                     }
                 }
@@ -246,16 +218,16 @@ pub(crate) fn setup_canvas_events(
                 st.current_shape = Some(ShapeBlock { kind: kind.clone(), x1: px, y1: py, x2: px, y2: py, color, width });
             }
         }
-    
+        
         c.queue_draw();
         Propagation::Proceed
         }));
     }
 
-    
     {
         let s = state.clone();
         let c = canvas.clone();
+        
         canvas.connect_motion_notify_event(move |_, event| {
         let tool = s.borrow().active_tool.clone();
 
@@ -263,6 +235,7 @@ pub(crate) fn setup_canvas_events(
             let (mx, my) = event.position();
             let (ox, oy) = s.borrow().page_origin;
             let zoom = s.borrow().zoom;
+
             let px = ((mx - ox) / zoom).clamp(0.0, PAGE_W);
             let py = ((my - oy) / zoom).clamp(0.0, PAGE_H);
 
@@ -303,8 +276,6 @@ pub(crate) fn setup_canvas_events(
                     let mut st = s.borrow_mut();
                     st.drag_mode = DragMode::Marquee { start_px, start_py, current_px: px, current_py: py };
                     st.selected_indices = hit_test_marquee(&st.current_page_data, start_px, start_py, px, py);
-                    
-                    
                     st.selected_index = if st.selected_indices.len() == 1 {
                         Some(st.selected_indices[0])
                     } else {
@@ -350,8 +321,6 @@ pub(crate) fn setup_canvas_events(
                                     }
                                 }
                                 ComponentPayload::RichText(block) => {
-                                    
-                                    
                                     match handle {
                                         ResizeHandle::BottomRight | ResizeHandle::TopRight => {
                                             block.width = (orig_w + dx).max(min_size);
@@ -378,6 +347,7 @@ pub(crate) fn setup_canvas_events(
             let (mx, my) = event.position();
             let (ox, oy) = s.borrow().page_origin;
             let zoom = s.borrow().zoom;
+
             let px = ((mx - ox) / zoom).clamp(0.0, PAGE_W);
             let py = ((my - oy) / zoom).clamp(0.0, PAGE_H);
             
@@ -389,7 +359,7 @@ pub(crate) fn setup_canvas_events(
             } else if tool == Tool::Eraser {
                 let mut st = s.borrow_mut();
                 if let Some(idx) = crate::models::select::hit_test_component(&st.current_page_data, px, py) {
-                    if matches!(st.current_page_data.components[idx], ComponentPayload::PenStroke(_)) {
+                    if matches!(st.current_page_data.components[idx], ComponentPayload::PenStroke(_) | ComponentPayload::Shape(_)) {
                         st.current_page_data.components.remove(idx);
                         c.queue_draw();
                     }
@@ -402,20 +372,19 @@ pub(crate) fn setup_canvas_events(
                 c.queue_draw();
             }
         }
+        
         Propagation::Proceed
     });
     }
 
-    
     {
         let s = state.clone();
         let c = canvas.clone();
         let w = window.clone();
+        
         canvas.connect_button_release_event(move |_, event| {
             let button = event.button();
-            
             let btn_trigger = EventTrigger::Mouse(button);
-            
             
             let should_restore = {
                 let st = s.borrow();
@@ -456,7 +425,6 @@ pub(crate) fn setup_canvas_events(
                     DragMode::Move { orig_positions, .. } => {
                         let mut st = s.borrow_mut();
                         let mut out_of_bounds = false;
-
                         
                         for &idx in &st.selected_indices {
                             if let Some(payload) = st.current_page_data.components.get(idx) {
@@ -470,7 +438,6 @@ pub(crate) fn setup_canvas_events(
                         }
 
                         if out_of_bounds {
-                            
                             for &(idx, orig_x, orig_y) in &orig_positions {
                                 if let Some(comp) = st.current_page_data.components.get_mut(idx) {
                                     match comp {
@@ -491,12 +458,10 @@ pub(crate) fn setup_canvas_events(
                                     }
                                 }
                             }
-
                             st.undo_stack.pop();
                             st.drag_mode = DragMode::None;
                             drop(st);
                             c.queue_draw();
-
                             
                             let alert = gtk::MessageDialog::new(
                                 Some(&w), gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::Ok,
@@ -506,11 +471,9 @@ pub(crate) fn setup_canvas_events(
                             unsafe { alert.destroy(); }
                             return Propagation::Proceed;
                         }
-
                         
                         if let Some(conn) = &st.db {
                             let blob = encode_payload_list(&st.current_page_data.components);
-                            
                             
                             let _ = conn.execute(
                                 "DELETE FROM component_rtree WHERE id IN (SELECT id FROM active_components WHERE page_id = ?1)",
@@ -529,10 +492,6 @@ pub(crate) fn setup_canvas_events(
                         }
 
                         st.is_modified = true;
-                        
-                        
-                        
-
                         let title = st.window_title();
                         st.drag_mode = DragMode::None;
                         drop(st);
@@ -542,7 +501,6 @@ pub(crate) fn setup_canvas_events(
                     DragMode::Resize { .. } => {
                         let mut st = s.borrow_mut();
                         
-                        
                         if let Some(conn) = &st.db {
                             let blob = encode_payload_list(&st.current_page_data.components);
                             
@@ -561,9 +519,6 @@ pub(crate) fn setup_canvas_events(
                         }
                         
                         st.is_modified = true;
-                        
-                        
-
                         let title = st.window_title();
                         st.drag_mode = DragMode::None;
                         drop(st);
@@ -578,9 +533,7 @@ pub(crate) fn setup_canvas_events(
                 }
                 return Propagation::Proceed;
         }
-
-        
-        
+            
         {
             let mut st = s.borrow_mut();
             st.is_drawing = false;
@@ -597,8 +550,6 @@ pub(crate) fn setup_canvas_events(
                     }
                 }
             } else if tool == Tool::Eraser {
-                
-                
                 if let Some(conn) = &st.db {
                     let blob = encode_payload_list(&st.current_page_data.components);
                     let _ = conn.execute(
@@ -615,9 +566,6 @@ pub(crate) fn setup_canvas_events(
                     );
                 }
                 st.is_modified = true;
-                
-                
-
                 let title = st.window_title();
                 drop(st);
                 w.set_title(&title);
@@ -644,7 +592,6 @@ pub(crate) fn setup_canvas_events(
     });
     }
 
-    
     {
         let s = state.clone();
         let c = canvas.clone();
@@ -670,7 +617,6 @@ pub(crate) fn setup_canvas_events(
                 let st = s.borrow();
                 (st.current_page, st.page_count)
             };
-
             
             let mut vadj = None;
             let mut current_parent = canvas_widget.parent();
@@ -685,7 +631,6 @@ pub(crate) fn setup_canvas_events(
             if let Some(adj) = vadj {
                 let at_bottom = adj.value() + adj.page_size() >= adj.upper() - 1.0;
                 let at_top = adj.value() <= adj.lower() + 1.0;
-
                 
                 if zoom <= 1.0 || (delta_y > 0.0 && at_bottom) {
                     if delta_y > 0.0 && cur + 1 < count {
@@ -697,7 +642,6 @@ pub(crate) fn setup_canvas_events(
                     }
                 }
                 
-                
                 if zoom <= 1.0 || (delta_y < 0.0 && at_top) {
                     if delta_y < 0.0 && cur > 0 {
                         let _ = s.borrow_mut().switch_to_page(cur - 1);
@@ -708,11 +652,8 @@ pub(crate) fn setup_canvas_events(
                     }
                 }
             }
-
-            
             
             Propagation::Proceed
         });
     }
-
 }
