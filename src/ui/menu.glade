@@ -494,24 +494,47 @@
   </object>
   <object class="GtkWindow" id="rustInk_window">
     <property name="can-focus">False</property>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkBox" id="window_box">
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="orientation">vertical</property>
-            <child>
-              <object class="GtkBox" id="header_box">
+          <child type="titlebar">
+              <object class="GtkHeaderBar" id="header_box">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="spacing">6</property>
+                <property name="show-close-button">False</property>
+                <property name="has-subtitle">False</property>
+                <property name="decoration-layout">:</property>
                 <style>
                   <class name="header-row" />
                 </style>
+                <child type="title">
+                  <object class="GtkBox" id="title_box">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="spacing">9</property>
+                    <child>
+                      <object class="GtkLabel" id="title_dot">
+                        <property name="visible">False</property>
+                        <property name="no-show-all">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="label">●</property>
+                        <property name="tooltip-text" translatable="yes">Unsaved changes</property>
+                        <style>
+                          <class name="title-dot" />
+                        </style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="title_label">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="ellipsize">end</property>
+                        <property name="max-width-chars">40</property>
+                        <style>
+                          <class name="title-text" />
+                        </style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
                 <child>
                   <object class="GtkImage" id="header_logo">
                     <property name="visible">True</property>
@@ -520,8 +543,6 @@
                     <property name="margin-end">6</property>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
                     <property name="position">0</property>
                   </packing>
                 </child>
@@ -712,9 +733,67 @@
                     </child>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
                     <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="btn_win_close">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="focus-on-click">False</property>
+                    <property name="tooltip-text" translatable="yes">Close</property>
+                    <style>
+                      <class name="win-ctl" />
+                    </style>
+                  </object>
+                  <packing>
+                    <property name="pack-type">end</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="btn_win_max">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="focus-on-click">False</property>
+                    <property name="tooltip-text" translatable="yes">Maximize</property>
+                    <style>
+                      <class name="win-ctl" />
+                    </style>
+                  </object>
+                  <packing>
+                    <property name="pack-type">end</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="btn_win_min">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="focus-on-click">False</property>
+                    <property name="tooltip-text" translatable="yes">Minimize</property>
+                    <style>
+                      <class name="win-ctl" />
+                    </style>
+                  </object>
+                  <packing>
+                    <property name="pack-type">end</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkSeparator" id="win_ctl_sep">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="orientation">vertical</property>
+                    <property name="margin-start">12</property>
+                    <property name="margin-end">12</property>
+                    <property name="margin-top">16</property>
+                    <property name="margin-bottom">16</property>
+                  </object>
+                  <packing>
+                    <property name="pack-type">end</property>
+                    <property name="position">3</property>
                   </packing>
                 </child>
                 <child>
@@ -732,10 +811,8 @@
                     </style>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
                     <property name="pack-type">end</property>
-                    <property name="position">2</property>
+                    <property name="position">4</property>
                   </packing>
                 </child>
                 <child>
@@ -753,19 +830,22 @@
                     </style>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
                     <property name="pack-type">end</property>
-                    <property name="position">3</property>
+                    <property name="position">5</property>
                   </packing>
                 </child>
               </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">0</property>
-              </packing>
-            </child>
+          </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkBox" id="window_box">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="orientation">vertical</property>
             <child>
               <object class="GtkOverlay" id="canvas_overlay">
                 <property name="visible">True</property>

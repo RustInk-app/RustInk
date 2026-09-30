@@ -144,14 +144,14 @@ pub fn setup_chrome(builder: &gtk::Builder, _canvas: &gtk::DrawingArea) {
         zoom_adj.set_value((zoom_adj.value() - 0.25).max(zoom_adj.lower()));
     }));
 
-        
+        // --- sidebar: maniglia sul bordo + tasto "+" ---
     let handle: gtk::Button     = builder.object("btn_close_sidebar").expect("btn_close_sidebar not found");
     let handle_icon: gtk::Image = builder.object("sidebar_handle_icon").expect("sidebar_handle_icon not found");
     let paned: gtk::Paned       = builder.object("first_panel").expect("first_panel not found");
     let sidebar: gtk::Box       = builder.object("sidebar_container").expect("sidebar_container not found");
     let sidebar_opt: gtk::CheckMenuItem = builder.object("view_sidebar_option").expect("view_sidebar_option not found");
 
-    
+    // la maniglia segue il bordo della sidebar e cambia freccia
     let sync = std::rc::Rc::new({
         let (handle, icon, paned, sidebar) = (handle.clone(), handle_icon.clone(), paned.clone(), sidebar.clone());
         move || {
@@ -169,11 +169,11 @@ pub fn setup_chrome(builder: &gtk::Builder, _canvas: &gtk::DrawingArea) {
     { let s = sync.clone(); paned.connect_position_notify(move |_| s()); }
     { let s = sync.clone(); sidebar.connect_visible_notify(move |_| s()); }
 
-    
+    // la voce di menu View > Sidebar comanda la visibilità; la maniglia clicca la voce
     sidebar_opt.connect_toggled(clone!(@weak sidebar => move |item| sidebar.set_visible(item.is_active())));
     handle.connect_clicked(clone!(@weak sidebar_opt => move |_| sidebar_opt.set_active(!sidebar_opt.is_active())));
 
-    
+    // "+" in fondo alla lista = stessa azione di "Add page" nel menu pagina
     if let (Some(side_add), Some(menu_add)) = (
         builder.object::<gtk::Button>("btn_sidebar_add_page"),
         builder.object::<gtk::Button>("btn_add_page"),
@@ -249,4 +249,90 @@ pub fn make_color_button(color: &Color, label: &str) -> gtk::ToggleButton {
     });
     btn.add(&area);
     btn
+}
+
+// ------------------------------------------------------------------
+// Barra del titolo personalizzata (GtkHeaderBar definita in menu.glade)
+// ------------------------------------------------------------------
+#[derive(Clone, Copy)]
+enum CtlIcon { Min, Max, Close }
+
+// Disegna le icone 11x11 identiche a titlebar.html (tratto 1.2, bianco).
+fn add_ctl_icon(btn: &gtk::Button, kind: CtlIcon, maximized: std::rc::Rc<std::cell::Cell<bool>>) {
+    let area = gtk::DrawingArea::new();
+    area.set_size_request(11, 11);
+    area.set_halign(gtk::Align::Center);
+    area.set_valign(gtk::Align::Center);
+    area.connect_draw(move |_w, cr| {
+        cr.set_source_rgb(1.0, 1.0, 1.0);
+        cr.set_line_width(1.2);
+        match kind {
+            CtlIcon::Min => {
+                cr.move_to(0.0, 5.5);
+                cr.line_to(11.0, 5.5);
+            }
+            CtlIcon::Max if maximized.get() => {
+                // "ripristina": due quadrati sovrapposti
+                cr.rectangle(0.6, 2.6, 7.8, 7.8);
+                cr.move_to(2.6, 2.6);
+                cr.line_to(2.6, 0.6);
+                cr.line_to(10.4, 0.6);
+                cr.line_to(10.4, 8.4);
+                cr.line_to(8.4, 8.4);
+            }
+            CtlIcon::Max => {
+                cr.rectangle(0.6, 0.6, 9.8, 9.8);
+            }
+            CtlIcon::Close => {
+                cr.move_to(0.5, 0.5);
+                cr.line_to(10.5, 10.5);
+                cr.move_to(10.5, 0.5);
+                cr.line_to(0.5, 10.5);
+            }
+        }
+        let _ = cr.stroke();
+        glib::Propagation::Proceed
+    });
+    btn.add(&area);
+    area.show();
+}
+
+pub fn setup_titlebar(builder: &gtk::Builder, window: &gtk::Window) {
+    let window = window.clone();
+    let btn_min: gtk::Button   = builder.object("btn_win_min").expect("btn_win_min not found");
+    let btn_max: gtk::Button   = builder.object("btn_win_max").expect("btn_win_max not found");
+    let btn_close: gtk::Button = builder.object("btn_win_close").expect("btn_win_close not found");
+    let title_label: gtk::Label = builder.object("title_label").expect("title_label not found");
+    let title_dot: gtk::Label   = builder.object("title_dot").expect("title_dot not found");
+
+    // --- icone + azioni ---
+    let maximized = std::rc::Rc::new(std::cell::Cell::new(window.is_maximized()));
+    add_ctl_icon(&btn_min, CtlIcon::Min, maximized.clone());
+    add_ctl_icon(&btn_max, CtlIcon::Max, maximized.clone());
+    add_ctl_icon(&btn_close, CtlIcon::Close, maximized.clone());
+
+    btn_min.connect_clicked(clone!(@weak window => move |_| window.iconify()));
+    btn_max.connect_clicked(clone!(@weak window => move |_| {
+        if window.is_maximized() { window.unmaximize() } else { window.maximize() }
+    }));
+    // close() passa da delete-event, quindi setup_window_close chiede ancora se salvare
+    btn_close.connect_clicked(clone!(@weak window => move |_| window.close()));
+
+    // icona/tooltip di "massimizza" <-> "ripristina" (anche con doppio clic o tasti del WM)
+    window.connect_window_state_event(clone!(@strong maximized, @weak btn_max => @default-return Propagation::Proceed, move |_, ev| {
+        let m = ev.new_window_state().contains(gtk::gdk::WindowState::MAXIMIZED);
+        maximized.set(m);
+        btn_max.set_tooltip_text(Some(if m { "Restore" } else { "Maximize" }));
+        if let Some(child) = btn_max.child() { child.queue_draw(); }
+        Propagation::Proceed
+    }));
+
+    // --- titolo: segue window.set_title(), il "*" finale diventa il pallino ---
+    let update_title = move |w: &gtk::Window| {
+        let t = w.title().map(|s| s.to_string()).unwrap_or_default();
+        title_dot.set_visible(t.ends_with('*'));
+        title_label.set_text(t.trim_end_matches('*'));
+    };
+    update_title(&window);
+    window.connect_title_notify(move |w| update_title(w));
 }

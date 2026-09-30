@@ -28,7 +28,27 @@ button:checked, button.tool:checked, button.pop-item:checked {
 button:checked label { color: @on_accent; }
 
 /* ---------- riga in alto: logo + menu ---------- */
-.header-row { padding: 4px 10px 4px 0; }
+/* GtkHeaderBar usata come barra del titolo (vedi titlebar.html) */
+headerbar.header-row {
+    background-image: none; background-color: @desk; color: @text;
+    border: none; border-bottom: 1px solid @line; box-shadow: none;
+    min-height: 56px; padding: 0 0 0 0; border-radius: 10px 10px 0 0;
+}
+window.maximized headerbar.header-row { border-radius: 0; }
+.title-text { font-size: 15px; font-weight: 700; color: @text; }
+.title-dot  { color: @accent; font-size: 10px; }
+headerbar.header-row separator { background-color: @line; }
+
+/* minimizza / massimizza / chiudi: a tutta altezza, senza bordo, angoli vivi */
+button.win-ctl {
+    background-image: none; background-color: transparent; border: none; border-radius: 0;
+    min-width: 46px; min-height: 56px; padding: 0; margin: 0;
+}
+button.win-ctl:hover  { background-color: @btn_hover; }
+button.win-ctl:active { background-color: @line; }
+#btn_win_close { border-top-right-radius: 10px; }
+#btn_win_close:hover  { background-color: @close; }
+window.maximized #btn_win_close { border-radius: 0; }
 menubar { background-color: transparent; background-image: none; box-shadow: none; }
 menubar > menuitem { padding: 6px 14px; border-radius: 10px; font-weight: 700; color: @text; border: 1px solid transparent; }
 menubar > menuitem:hover, menubar > menuitem:selected, menubar > menuitem:active, menubar > menuitem:checked {

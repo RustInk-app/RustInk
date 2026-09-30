@@ -120,6 +120,7 @@ pub fn build_ui(app: &gtk::Application) {
     }
     
     utils::load_css();
+    utils::setup_titlebar(&builder, &window);
 
     let canvas: gtk::DrawingArea = builder
         .object("first_panel_drawing_area")
